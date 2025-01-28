@@ -16,22 +16,15 @@ fn cosine_similarity(v1: &[f32], v2: &[f32]) -> f32 {
     dot_product / (norm1 * norm2)
 }
 
-// pub fn check_duplicate_text(text1: &str, text2: &str) -> Result<()> {
-//     let documents = vec![text1, text2];
-//     let embeddings = MODEL.embed(documents, None)?;
+pub fn check_duplicate_text(text1: &str, text2: &str) -> Result<()> {
+    let documents = vec![text1, text2];
+    let embeddings = MODEL.embed(documents, None)?;
     
-//     let similarity = cosine_similarity(&embeddings[0], &embeddings[1]);
-//     println!("\nCosine Similarity: {}", similarity);
+    let similarity = cosine_similarity(&embeddings[0], &embeddings[1]);
+    println!("\nCosine Similarity: {}", similarity);
 
-//     Ok(())
-// }
-
-fn main() -> Result<()> {
-    let text1 = "Which of the following jobs was called by the Harvard Business Review the sexiest job of the 21st century?";
-    let text2 = "According to the Harvard Business Review, which job has been referred to as the 'sexiest job of the 21st century'?";
-    
-    check_duplicate_text(text1, text2)?;
-    
     Ok(())
 }
+
+
 

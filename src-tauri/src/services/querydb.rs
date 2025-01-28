@@ -2,13 +2,13 @@ use duckdb::{Connection, Result};
 use serde_json;
 
 pub fn query_db() -> Result<Vec<(Vec<f32>, Vec<f32>)>> {
-    let conn = Connection::open("../../data.duckdb")?;
+    let conn = Connection::open("data.duckdb")?;
 
     let mut stmt = conn.prepare("
         SELECT 
             CAST(question_embedding AS JSON) as question_json,
             CAST(answer_embedding AS JSON) as answer_json 
-        FROM QCData
+        FROM Data
     ")?;
 
     let rows = stmt.query_map([], |row| {

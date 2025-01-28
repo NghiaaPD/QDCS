@@ -26,21 +26,23 @@ fn extract_cell_text(cell: &TableRowContent) -> String {
     }
 }
 
-#[derive(Default)]
-struct Question {
+#[derive(Default, serde::Serialize)]
+pub struct Question {
     id: String,
     text: String,
     answers: Vec<String>,
     correct_answer: String,
 }
 
-pub fn read_docx_content(file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::error::Error>> {
     if !Path::new(file_path).exists() {
         return Err("File không tồn tại!".into());
     }
 
     let doc_file = DocxFile::from_file(file_path)?;
     let docx = doc_file.parse()?;
+
+    let mut questions = Vec::new();
 
     for element in &docx.document.body.content {
         if let BodyContent::Table(table) = element {
@@ -107,10 +109,12 @@ pub fn read_docx_content(file_path: &str) -> Result<(), Box<dyn std::error::Erro
             }
             println!("Đáp án đúng: {}", question.correct_answer);
             println!("-------------------");
+            
+            questions.push(question);
         }
     }
     
-    Ok(())
+    Ok(questions)
 }
 
 // fn main() {

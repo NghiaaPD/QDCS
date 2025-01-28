@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import { fade } from 'svelte/transition';
+	import { invoke } from '@tauri-apps/api/tauri';
+	import { writeBinaryFile } from '@tauri-apps/api/fs';
+	import { tempdir } from '@tauri-apps/api/os';
 
 	let fileInput: HTMLInputElement;
 	let isUploading = false;
@@ -55,13 +58,61 @@
 			await new Promise((resolve) => setTimeout(resolve, 200));
 		}
 
-		// Khi upload xong
-		isUploading = false;
-		showSuccess = true;
 		uploadedFile = file;
+		isUploading = false;
+
 		setTimeout(() => {
 			showSuccess = false;
+			showError = false;
 		}, 3000);
+	}
+
+	async function processFile() {
+		if (!uploadedFile) return;
+		const file = uploadedFile;
+
+		try {
+			const arrayBuffer = await file.arrayBuffer();
+			const uint8Array = new Uint8Array(arrayBuffer);
+			const tempDir = await tempdir();
+			const tempPath = `${tempDir}/temp_${Date.now()}.docx`;
+			await writeBinaryFile(tempPath, uint8Array);
+
+			const result = await invoke('process_docx', {
+				filePath: tempPath
+			});
+
+			// Parse kết quả
+			const data = JSON.parse(result as string);
+
+			// In kết quả câu hỏi
+			console.log('=== DANH SÁCH CÂU HỎI ===');
+			data.questions.forEach((q: any) => {
+				console.log(`Câu hỏi ${q.id}: ${q.text}`);
+				console.log('Các đáp án:');
+				q.answers.forEach((a: string) => console.log(`- ${a}`));
+				console.log(`Đáp án đúng: ${q.correct_answer}`);
+				console.log('-------------------');
+			});
+
+			// In kết quả embeddings
+			console.log('\n=== EMBEDDINGS TỪ DATABASE ===');
+			console.log(`Tổng số cặp embedding: ${data.embeddings.length}`);
+
+			// In 2 cặp đầu tiên
+			data.embeddings.slice(0, 2).forEach((pair: any, i: number) => {
+				const [question, answer] = pair;
+				console.log(`\n=== Cặp embedding thứ ${i + 1} ===`);
+				console.log(`Question embedding (${question.length} chiều):`, question);
+				console.log(`Answer embedding (${answer.length} chiều):`, answer);
+			});
+
+			showSuccess = true;
+		} catch (error) {
+			errorMessage = error as string;
+			showError = true;
+			console.error('Lỗi:', error);
+		}
 	}
 
 	function removeFile() {
@@ -147,10 +198,7 @@
 			<div class="mt-6">
 				<button
 					class="w-full rounded-lg bg-gradient-to-r from-[#8E7FDD] to-[#CCABD6] py-3 font-medium text-white transition-all duration-300 hover:shadow-lg hover:shadow-[#8E7FDD]/30"
-					on:click={() => {
-						// Xử lý logic gửi file lên BE ở đây
-						console.log('Gửi file lên BE:', uploadedFile);
-					}}
+					on:click={processFile}
 				>
 					Kiểm tra
 				</button>
@@ -169,7 +217,7 @@
 		</div>
 		<div class="flex flex-col">
 			<span class="font-medium">Thành công!</span>
-			<span class="text-sm text-white/80">File đã được tải lên thành công</span>
+			<span class="text-sm text-white/80">Đã hoàn thành kiểm tra trùng lặp câu hỏi</span>
 		</div>
 	</div>
 {/if}
