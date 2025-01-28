@@ -43,6 +43,8 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                         results.push(serde_json::json!({
                             "docx_question": docx_item.text,
                             "docx_answer": docx_item.correct_answer,
+                            "answers": docx_item.answers,
+                            "true_answer": docx_item.correct_answer,
                             "db_question": "Question from DB",
                             "db_answer": "Answer from DB",
                             "similarity_score": calculate_similarity_score(question_similarity, answer_similarity),
@@ -63,10 +65,12 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                 }
                 
                 if !found_similar {
-                    if let Some((db_item, (q_sim, a_sim), _)) = max_similarity {
+                    if let Some((_db_item, (q_sim, a_sim), _)) = max_similarity {
                         results.push(serde_json::json!({
                             "docx_question": docx_item.text,
                             "docx_answer": docx_item.correct_answer,
+                            "answers": docx_item.answers,
+                            "true_answer": docx_item.correct_answer,
                             "db_question": "Question from DB",
                             "db_answer": "Answer from DB",
                             "similarity_score": calculate_similarity_score(q_sim, a_sim),

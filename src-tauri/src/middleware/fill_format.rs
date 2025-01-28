@@ -64,10 +64,8 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
                 question_embedding: Vec::new(),
                 answer_embedding: Vec::new(),
             };
-            let mut is_next_answer = false;
-            let mut correct_answer_letter = String::new();
 
-            // Xử lý hàng đầu tiên
+            // Thu thập câu hỏi từ hàng đầu tiên
             if let Some(first_row) = table.rows.first() {
                 for (cell_idx, cell) in first_row.cells.iter().enumerate() {
                     let cell_text = extract_cell_text(cell).trim().to_string();
@@ -81,43 +79,46 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
                 }
             }
 
+            // Map để lưu trữ các câu trả lời theo key (A, B, C, D)
+            let mut answer_texts: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+            let mut correct_answer_key = String::new();
+
+            // Thu thập các câu trả lời và ANSWER
+            for row in table.rows.iter() {
+                let first_cell = extract_cell_text(&row.cells[0]).trim().to_string();
+                
+                // Nếu là dòng câu trả lời (a., b., c., d.)
+                if first_cell.len() == 2 && first_cell.ends_with('.') {
+                    let option_key = first_cell.chars().next().unwrap().to_uppercase().to_string();
+                    if let Some(cell) = row.cells.get(1) {
+                        let answer_text = extract_cell_text(cell).trim().to_string();
+                        answer_texts.insert(option_key.clone(), answer_text.clone());
+                        question.answers.push(format!("{} {}", first_cell, answer_text));
+                    }
+                }
+                
+                // Nếu là dòng ANSWER
+                if first_cell == "ANSWER:" {
+                    if let Some(cell) = row.cells.get(1) {
+                        correct_answer_key = extract_cell_text(cell).trim().to_uppercase().to_string();
+                    }
+                }
+            }
+
+            // Lấy câu trả lời đúng từ map
+            if let Some(correct_text) = answer_texts.get(&correct_answer_key) {
+                question.correct_answer = correct_text.clone();
+            }
+
+            // Kiểm tra và tạo embeddings
             if question.id.is_empty() {
                 return Err("File sai format: Thiếu ID câu hỏi (QN=)".into());
             }
             if question.text.is_empty() {
                 return Err(format!("File sai format: Câu hỏi {} thiếu nội dung", question.id).into());
             }
-
-            for row in table.rows.iter().skip(1) {
-                let mut row_text = Vec::new();
-                
-                for cell in &row.cells {
-                    let cell_text = extract_cell_text(cell).trim().to_string();
-                    if !cell_text.is_empty() {
-                        match cell_text.as_str() {
-                            "ANSWER:" => is_next_answer = true,
-                            text if is_next_answer => {
-                                correct_answer_letter = text.to_string();
-                                is_next_answer = false;
-                            },
-                            _ => row_text.push(cell_text),
-                        }
-                    }
-                }
-
-                if let Some(first) = row_text.first() {
-                    if first.starts_with(|c: char| c.is_ascii_lowercase() && c.is_alphabetic()) 
-                       && first.len() <= 2 
-                    {
-                        if let Some(second) = row_text.get(1) {
-                            let answer = format!("{} {}", first, second);
-                            if first.trim().starts_with(&correct_answer_letter.trim().to_lowercase()) {
-                                question.correct_answer = second.clone();
-                            }
-                            question.answers.push(answer);
-                        }
-                    }
-                }
+            if question.correct_answer.is_empty() {
+                return Err(format!("File sai format: Câu hỏi {} thiếu đáp án đúng", question.id).into());
             }
 
             question.question_embedding = EMBEDDING_MODEL.embed(
@@ -142,5 +143,7 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
 //     match read_docx_content(file_path) {
 //         Ok(_) => println!("Đã đọc file thành công"),
 //         Err(e) => println!("Lỗi khi đọc file: {}", e),
+//     }
+// }
 //     }
 // }

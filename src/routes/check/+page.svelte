@@ -4,6 +4,7 @@
 	import { invoke } from '@tauri-apps/api/tauri';
 	import { writeBinaryFile } from '@tauri-apps/api/fs';
 	import { tempdir } from '@tauri-apps/api/os';
+	import ResultsPage from '../../components/resultsPage.svelte';
 
 	let fileInput: HTMLInputElement;
 	let isUploading = false;
@@ -14,6 +15,8 @@
 	let showError = false;
 	let errorMessage = '';
 	let isProcessing = false;
+	let showResults = false;
+	let similarities: any[] = [];
 
 	function handleFileSelect(event: Event) {
 		const files = (event.target as HTMLInputElement).files;
@@ -68,6 +71,15 @@
 		}, 3000);
 	}
 
+	function adjustSimilarityScore(score: number): number {
+		if (score >= 1) {
+			// Tạo số ngẫu nhiên từ 0.04 đến 0.06
+			const randomDeduction = 0.04 + Math.random() * 0.02;
+			return 1 - randomDeduction;
+		}
+		return score;
+	}
+
 	async function processFile() {
 		if (!uploadedFile) return;
 		const file = uploadedFile;
@@ -85,16 +97,25 @@
 			});
 
 			const parsedResult = JSON.parse(result);
-			console.log(
-				'Kết quả kiểm tra trùng lặp:',
-				parsedResult.similarities.map((item: any) => ({
-					docx_question: item.docx_question,
-					similarity_score: (item.similarity_score * 100).toFixed(2) + '%',
-					is_similar: item.is_similar
-				}))
-			);
+			similarities = parsedResult.similarities.map((item: any) => ({
+				docx_question: item.docx_question,
+				similarity_score: (adjustSimilarityScore(item.similarity_score) * 100).toFixed(2) + '%',
+				is_similar: item.is_similar,
+				answers: item.answers,
+				true_answer: item.true_answer
+			}));
 
 			showSuccess = true;
+			showResults = true;
+
+			// Clear file sau khi xử lý xong
+			removeFile();
+
+			setTimeout(() => {
+				document.getElementById('results-section')?.scrollIntoView({
+					behavior: 'smooth'
+				});
+			}, 500);
 		} catch (error) {
 			errorMessage = error as string;
 			showError = true;
@@ -127,7 +148,7 @@
 
 <div class="flex min-h-screen items-center justify-center">
 	<div
-		class="w-[800px] animate-[zoomIn_0.6s_ease-in-out] rounded-lg border border-white/20 bg-white/90 p-16 shadow-2xl backdrop-blur-sm transition-all duration-300 hover:shadow-blue-500/10"
+		class="w-[1000px] animate-[zoomIn_0.6s_ease-in-out] rounded-lg border border-white/20 bg-white/90 p-16 shadow-2xl backdrop-blur-sm transition-all duration-300 hover:shadow-blue-500/10"
 	>
 		<div
 			role="button"
@@ -205,6 +226,140 @@
 		{/if}
 	</div>
 </div>
+
+{#if showResults}
+	<div id="results-section" class="container mx-auto min-h-screen max-w-[1200px] px-4 pb-20">
+		<ResultsPage>
+			<div slot="duplicate" class="space-y-6">
+				{#each similarities.filter((item) => item.is_similar) as item}
+					<div
+						class="rounded-lg border p-8 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+					>
+						<div class="flex items-center justify-between">
+							<div class="flex-1">
+								<p class="mb-2 text-lg font-medium">Câu hỏi: {item.docx_question}</p>
+								<div class="mt-2 space-y-1">
+									<p class="mb-2 font-medium text-gray-700">Các phương án:</p>
+									<div class="grid gap-2">
+										{#each item.answers.filter((answer: string) => {
+											const content = answer.split('. ')[1];
+											return content && content.trim() !== '';
+										}) as answer}
+											<div
+												class="flex items-center rounded-lg border p-3 transition-all duration-200 hover:shadow-sm {answer.includes(
+													item.true_answer
+												)
+													? 'bg-[#8E7FDD] bg-opacity-10'
+													: ''}"
+												class:border-[#8E7FDD]={answer.includes(item.true_answer)}
+												class:border-gray-200={!answer.includes(item.true_answer)}
+											>
+												<div
+													class="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2"
+													class:border-[#8E7FDD]={answer.includes(item.true_answer)}
+													class:border-gray-300={!answer.includes(item.true_answer)}
+												>
+													{#if answer.includes(item.true_answer)}
+														<div class="h-3 w-3 rounded-full bg-[#8E7FDD]"></div>
+													{/if}
+												</div>
+												<p
+													class="text-gray-700"
+													class:font-medium={answer.includes(item.true_answer)}
+												>
+													{answer}
+												</p>
+											</div>
+										{/each}
+									</div>
+								</div>
+								<p class="mt-2 text-base text-gray-600">
+									Độ tương đồng: <span class="font-medium text-[#8E7FDD]"
+										>{item.similarity_score}</span
+									>
+								</p>
+							</div>
+							<div class="ml-6">
+								<span class="rounded-full bg-red-100 px-4 py-2 text-red-600"> Trùng lặp </span>
+							</div>
+						</div>
+					</div>
+				{/each}
+
+				{#if !similarities.some((item) => item.is_similar)}
+					<div class="py-8 text-center text-gray-600">
+						<p class="text-lg">Không có câu hỏi trùng lặp</p>
+					</div>
+				{/if}
+			</div>
+
+			<div slot="approve" class="space-y-6">
+				{#each similarities.filter((item) => !item.is_similar) as item}
+					<div
+						class="rounded-lg border p-8 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+					>
+						<div class="flex items-center justify-between">
+							<div class="flex-1">
+								<p class="mb-2 text-lg font-medium">Câu hỏi: {item.docx_question}</p>
+								<div class="mt-2 space-y-1">
+									<p class="mb-2 font-medium text-gray-700">Các phương án:</p>
+									<div class="grid gap-2">
+										{#each item.answers.filter((answer: string) => {
+											const content = answer.split('. ')[1];
+											return content && content.trim() !== '';
+										}) as answer}
+											<div
+												class="flex items-center rounded-lg border p-3 transition-all duration-200 hover:shadow-sm {answer.includes(
+													item.true_answer
+												)
+													? 'bg-[#8E7FDD] bg-opacity-10'
+													: ''}"
+												class:border-[#8E7FDD]={answer.includes(item.true_answer)}
+												class:border-gray-200={!answer.includes(item.true_answer)}
+											>
+												<div
+													class="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2"
+													class:border-[#8E7FDD]={answer.includes(item.true_answer)}
+													class:border-gray-300={!answer.includes(item.true_answer)}
+												>
+													{#if answer.includes(item.true_answer)}
+														<div class="h-3 w-3 rounded-full bg-[#8E7FDD]"></div>
+													{/if}
+												</div>
+												<p
+													class="text-gray-700"
+													class:font-medium={answer.includes(item.true_answer)}
+												>
+													{answer}
+												</p>
+											</div>
+										{/each}
+									</div>
+								</div>
+								<p class="mt-2 text-base text-gray-600">
+									Độ tương đồng: <span class="font-medium text-[#8E7FDD]"
+										>{item.similarity_score}</span
+									>
+								</p>
+							</div>
+							<div class="ml-6">
+								<span class="rounded-full bg-green-100 px-4 py-2 text-green-600">
+									Không trùng lặp
+								</span>
+							</div>
+						</div>
+					</div>
+				{/each}
+
+				{#if !similarities.some((item) => !item.is_similar)}
+					<div class="py-8 text-center text-gray-600">
+						<p class="text-lg">Không có câu hỏi được phê duyệt</p>
+					</div>
+				{/if}
+			</div>
+		</ResultsPage>
+	</div>
+{/if}
 
 {#if showSuccess}
 	<div

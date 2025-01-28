@@ -35,6 +35,3 @@ default = [ "custom-protocol" ]
 # DO NOT remove this
 custom-protocol = [ "tauri/custom-protocol" ]
 
-[[bin]]
-name = "querydb"
-path = "src/services/querydb.rs"
