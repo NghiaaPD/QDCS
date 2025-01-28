@@ -1,1 +1,2 @@
-pub mod check_duplicate;
+pub mod cosine_calculate;
+pub mod plot_similarity;

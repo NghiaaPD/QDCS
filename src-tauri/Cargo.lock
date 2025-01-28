@@ -102,6 +102,7 @@ dependencies = [
  "duckdb",
  "fastembed",
  "hard-xml",
+ "lazy_static",
  "once_cell",
  "serde",
  "serde_json",

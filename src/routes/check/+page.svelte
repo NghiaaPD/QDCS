@@ -13,6 +13,7 @@
 	let uploadedFile: File | null = null;
 	let showError = false;
 	let errorMessage = '';
+	let isProcessing = false;
 
 	function handleFileSelect(event: Event) {
 		const files = (event.target as HTMLInputElement).files;
@@ -71,6 +72,7 @@
 		if (!uploadedFile) return;
 		const file = uploadedFile;
 
+		isProcessing = true;
 		try {
 			const arrayBuffer = await file.arrayBuffer();
 			const uint8Array = new Uint8Array(arrayBuffer);
@@ -78,40 +80,27 @@
 			const tempPath = `${tempDir}/temp_${Date.now()}.docx`;
 			await writeBinaryFile(tempPath, uint8Array);
 
-			const result = await invoke('process_docx', {
+			const result = await invoke<string>('process_docx', {
 				filePath: tempPath
 			});
 
-			// Parse kết quả
-			const data = JSON.parse(result as string);
-
-			// In kết quả câu hỏi
-			console.log('=== DANH SÁCH CÂU HỎI ===');
-			data.questions.forEach((q: any) => {
-				console.log(`Câu hỏi ${q.id}: ${q.text}`);
-				console.log('Các đáp án:');
-				q.answers.forEach((a: string) => console.log(`- ${a}`));
-				console.log(`Đáp án đúng: ${q.correct_answer}`);
-				console.log('-------------------');
-			});
-
-			// In kết quả embeddings
-			console.log('\n=== EMBEDDINGS TỪ DATABASE ===');
-			console.log(`Tổng số cặp embedding: ${data.embeddings.length}`);
-
-			// In 2 cặp đầu tiên
-			data.embeddings.slice(0, 2).forEach((pair: any, i: number) => {
-				const [question, answer] = pair;
-				console.log(`\n=== Cặp embedding thứ ${i + 1} ===`);
-				console.log(`Question embedding (${question.length} chiều):`, question);
-				console.log(`Answer embedding (${answer.length} chiều):`, answer);
-			});
+			const parsedResult = JSON.parse(result);
+			console.log(
+				'Kết quả kiểm tra trùng lặp:',
+				parsedResult.similarities.map((item: any) => ({
+					docx_question: item.docx_question,
+					similarity_score: (item.similarity_score * 100).toFixed(2) + '%',
+					is_similar: item.is_similar
+				}))
+			);
 
 			showSuccess = true;
 		} catch (error) {
 			errorMessage = error as string;
 			showError = true;
 			console.error('Lỗi:', error);
+		} finally {
+			isProcessing = false;
 		}
 	}
 
@@ -197,10 +186,20 @@
 		{#if uploadedFile}
 			<div class="mt-6">
 				<button
-					class="w-full rounded-lg bg-gradient-to-r from-[#8E7FDD] to-[#CCABD6] py-3 font-medium text-white transition-all duration-300 hover:shadow-lg hover:shadow-[#8E7FDD]/30"
+					class="w-full rounded-lg bg-gradient-to-r from-[#8E7FDD] to-[#CCABD6] py-3 font-medium text-white transition-all duration-300 hover:shadow-lg hover:shadow-[#8E7FDD]/30 disabled:cursor-not-allowed disabled:opacity-50"
 					on:click={processFile}
+					disabled={isProcessing}
 				>
-					Kiểm tra
+					{#if isProcessing}
+						<div class="flex items-center justify-center gap-2">
+							<div
+								class="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"
+							></div>
+							<span>Đang xử lý...</span>
+						</div>
+					{:else}
+						Kiểm tra
+					{/if}
 				</button>
 			</div>
 		{/if}

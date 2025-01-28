@@ -1,6 +1,15 @@
 use docx_rust::DocxFile;
 use docx_rust::document::{BodyContent, ParagraphContent, RunContent, TableRowContent, TableCellContent};
 use std::path::Path;
+use lazy_static::lazy_static;
+use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
+
+lazy_static! {
+    static ref EMBEDDING_MODEL: TextEmbedding = TextEmbedding::try_new(
+        InitOptions::new(EmbeddingModel::AllMiniLML6V2)
+            .with_show_download_progress(true)
+    ).expect("Không thể khởi tạo model embedding");
+}
 
 fn extract_cell_text(cell: &TableRowContent) -> String {
     match cell {
@@ -26,12 +35,14 @@ fn extract_cell_text(cell: &TableRowContent) -> String {
     }
 }
 
-#[derive(Default, serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 pub struct Question {
-    id: String,
-    text: String,
-    answers: Vec<String>,
-    correct_answer: String,
+    pub id: String,
+    pub text: String,
+    pub answers: Vec<String>,
+    pub correct_answer: String,
+    pub question_embedding: Vec<f32>,
+    pub answer_embedding: Vec<f32>,
 }
 
 pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::error::Error>> {
@@ -41,12 +52,18 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
 
     let doc_file = DocxFile::from_file(file_path)?;
     let docx = doc_file.parse()?;
-
     let mut questions = Vec::new();
 
     for element in &docx.document.body.content {
         if let BodyContent::Table(table) = element {
-            let mut question = Question::default();
+            let mut question = Question {
+                id: String::new(),
+                text: String::new(),
+                answers: Vec::new(),
+                correct_answer: String::new(),
+                question_embedding: Vec::new(),
+                answer_embedding: Vec::new(),
+            };
             let mut is_next_answer = false;
             let mut correct_answer_letter = String::new();
 
@@ -102,14 +119,17 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
                     }
                 }
             }
-            println!("Câu hỏi {}: {}", question.id, question.text);
-            println!("Các đáp án:");
-            for answer in &question.answers {
-                println!("- {}", answer);
-            }
-            println!("Đáp án đúng: {}", question.correct_answer);
-            println!("-------------------");
+
+            question.question_embedding = EMBEDDING_MODEL.embed(
+                vec![&question.text], 
+                None
+            )?.remove(0);
             
+            question.answer_embedding = EMBEDDING_MODEL.embed(
+                vec![&question.correct_answer], 
+                None
+            )?.remove(0);
+
             questions.push(question);
         }
     }
