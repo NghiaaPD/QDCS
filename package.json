@@ -48,6 +48,8 @@
 		"@sveltejs/enhanced-img": "^0.4.4",
 		"@sveltejs/kit": "^2.0.0",
 		"@tauri-apps/api": "1.0.0",
-		"drizzle-orm": "^0.38.4"
+		"drizzle-orm": "^0.38.4",
+		"html2pdf.js": "^0.10.2",
+		"install": "^0.13.0"
 	}
 }

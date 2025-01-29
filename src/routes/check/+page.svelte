@@ -5,6 +5,7 @@
 	import { writeBinaryFile } from '@tauri-apps/api/fs';
 	import { tempdir } from '@tauri-apps/api/os';
 	import ResultsPage from '../../components/resultsPage.svelte';
+	import html2pdf from 'html2pdf.js';
 
 	let fileInput: HTMLInputElement;
 	let isUploading = false;
@@ -99,10 +100,13 @@
 			const parsedResult = JSON.parse(result);
 			similarities = parsedResult.similarities.map((item: any) => ({
 				docx_question: item.docx_question,
+				docx_answer: item.docx_answer,
 				similarity_score: (adjustSimilarityScore(item.similarity_score) * 100).toFixed(2) + '%',
 				is_similar: item.is_similar,
 				answers: item.answers,
-				true_answer: item.true_answer
+				true_answer: item.true_answer,
+				similar_docx_question: item.similar_docx_question,
+				similar_docx_answer: item.similar_docx_answer
 			}));
 
 			showSuccess = true;
@@ -128,6 +132,27 @@
 	function removeFile() {
 		uploadedFile = null;
 		fileInput.value = '';
+	}
+
+	async function exportToPDF() {
+		const element = document.getElementById('duplicate-section');
+		const opt = {
+			margin: 10,
+			filename: 'bao-cao-trung-lap.pdf',
+			image: { type: 'jpeg', quality: 0.98 },
+			html2canvas: {
+				scale: 2,
+				useCORS: true,
+				letterRendering: true
+			},
+			jsPDF: {
+				unit: 'mm',
+				format: 'a4',
+				orientation: 'portrait'
+			}
+		};
+
+		html2pdf().from(element).set(opt).save();
 	}
 </script>
 
@@ -230,67 +255,72 @@
 {#if showResults}
 	<div id="results-section" class="container mx-auto min-h-screen max-w-[1200px] px-4 pb-20">
 		<ResultsPage>
-			<div slot="duplicate" class="space-y-6">
-				{#each similarities.filter((item) => item.is_similar) as item}
-					<div
-						class="rounded-lg border p-8 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
-					>
-						<div class="flex items-center justify-between">
-							<div class="flex-1">
-								<p class="mb-2 text-lg font-medium">Câu hỏi: {item.docx_question}</p>
-								<div class="mt-2 space-y-1">
-									<p class="mb-2 font-medium text-gray-700">Các phương án:</p>
-									<div class="grid gap-2">
-										{#each item.answers.filter((answer: string) => {
-											const content = answer.split('. ')[1];
-											return content && content.trim() !== '';
-										}) as answer}
-											<div
-												class="flex items-center rounded-lg border p-3 transition-all duration-200 hover:shadow-sm {answer.includes(
-													item.true_answer
-												)
-													? 'bg-[#8E7FDD] bg-opacity-10'
-													: ''}"
-												class:border-[#8E7FDD]={answer.includes(item.true_answer)}
-												class:border-gray-200={!answer.includes(item.true_answer)}
-											>
-												<div
-													class="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2"
-													class:border-[#8E7FDD]={answer.includes(item.true_answer)}
-													class:border-gray-300={!answer.includes(item.true_answer)}
-												>
-													{#if answer.includes(item.true_answer)}
-														<div class="h-3 w-3 rounded-full bg-[#8E7FDD]"></div>
-													{/if}
-												</div>
-												<p
-													class="text-gray-700"
-													class:font-medium={answer.includes(item.true_answer)}
-												>
-													{answer}
-												</p>
+			<div slot="duplicate" id="duplicate-section">
+				<div class="space-y-6">
+					{#each similarities.filter((item) => item.is_similar) as item}
+						<div
+							class="rounded-lg border p-8 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+						>
+							<div class="flex items-center justify-between">
+								<div class="flex-1">
+									<div class="mb-6 border-b pb-4">
+										<p class="mb-2 text-lg font-medium">Câu hỏi: {item.docx_question}</p>
+										<div class="mt-2 space-y-1">
+											<p class="mb-2 font-medium text-gray-700">Các phương án:</p>
+											<div class="grid gap-2">
+												{#each item.answers.filter((answer: string) => {
+													const content = answer.split('. ')[1];
+													return content && content.trim() !== '';
+												}) as answer}
+													<div
+														class="flex items-center rounded-lg border p-3 transition-all duration-200 hover:shadow-sm {answer.includes(
+															item.true_answer
+														)
+															? 'bg-[#8E7FDD] bg-opacity-10'
+															: ''}"
+														class:border-[#8E7FDD]={answer.includes(item.true_answer)}
+														class:border-gray-200={!answer.includes(item.true_answer)}
+													>
+														<div
+															class="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2"
+															class:border-[#8E7FDD]={answer.includes(item.true_answer)}
+															class:border-gray-300={!answer.includes(item.true_answer)}
+														>
+															{#if answer.includes(item.true_answer)}
+																<div class="h-3 w-3 rounded-full bg-[#8E7FDD]"></div>
+															{/if}
+														</div>
+														<p
+															class="text-gray-700"
+															class:font-medium={answer.includes(item.true_answer)}
+														>
+															{answer}
+														</p>
+													</div>
+												{/each}
 											</div>
-										{/each}
+										</div>
 									</div>
+
+									<p class="mt-4 text-base text-gray-600">
+										Độ tương đồng: <span class="font-medium text-[#8E7FDD]"
+											>{item.similarity_score}</span
+										>
+									</p>
 								</div>
-								<p class="mt-2 text-base text-gray-600">
-									Độ tương đồng: <span class="font-medium text-[#8E7FDD]"
-										>{item.similarity_score}</span
-									>
-								</p>
-							</div>
-							<div class="ml-6">
-								<span class="rounded-full bg-red-100 px-4 py-2 text-red-600"> Trùng lặp </span>
+								<div class="ml-6">
+									<span class="rounded-full bg-red-100 px-4 py-2 text-red-600">Trùng lặp</span>
+								</div>
 							</div>
 						</div>
-					</div>
-				{/each}
+					{/each}
 
-				{#if !similarities.some((item) => item.is_similar)}
-					<div class="py-8 text-center text-gray-600">
-						<p class="text-lg">Không có câu hỏi trùng lặp</p>
-					</div>
-				{/if}
+					{#if !similarities.some((item) => item.is_similar)}
+						<div class="py-8 text-center text-gray-600">
+							<p class="text-lg">Không có câu hỏi trùng lặp</p>
+						</div>
+					{/if}
+				</div>
 			</div>
 
 			<div slot="approve" class="space-y-6">
@@ -358,6 +388,17 @@
 				{/if}
 			</div>
 		</ResultsPage>
+
+		<!-- Nút xuất PDF -->
+		<div class="mt-8 flex justify-center pb-8">
+			<button
+				class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#8E7FDD] to-[#CCABD6] px-6 py-3 font-medium text-white transition-all duration-300 hover:shadow-lg hover:shadow-[#8E7FDD]/30"
+				on:click={exportToPDF}
+			>
+				<Icon icon="icon-park-outline:file-pdf" class="h-5 w-5" />
+				<span>Xuất PDF</span>
+			</button>
+		</div>
 	</div>
 {/if}
 
