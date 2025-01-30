@@ -1,43 +1,106 @@
+use docx_rust::document::Document;
 use docx_rust::DocxFile;
-use docx_rust::document::BodyContent;
-use std::path::Path;
+use std::fs::File;
+use std::io::Read;
 
-pub fn read_tables_from_word(file_path: &str) -> Result<Vec<&BodyContent>, Box<dyn std::error::Error>> {
-    // Kiểm tra file tồn tại
-    if !Path::new(file_path).exists() {
-        return Err("File không tồn tại!".into());
-    }
-
-    // Đọc và parse file docx
-    let doc_file = DocxFile::from_file(file_path)?;
-    let docx = doc_file.parse()?;
-    
-    // Lọc và lấy ra các phần tử là bảng
-    let tables: Vec<&BodyContent> = docx.document.body.content
-        .iter()
-        .filter(|content| matches!(content, BodyContent::Table(_)))
-        .collect();
-    
-    Ok(tables)
+pub struct QuestionData {
+    pub qn: String,
+    pub question: String,
+    pub options: Vec<String>,
+    pub answer: String,
+    pub mark: String,
+    pub unit: String,
+    pub lo: String,
+    pub mix_choices: String,
+    pub creator_reviewer: String,
+    pub editor: String,
+    pub reference: String,
 }
 
-fn main() {
-    // Đường dẫn tới file docx của bạn
-    let file_path = "test.docx";  // Thay đổi đường dẫn này theo file của bạn
+pub fn extract_questions_from_docx(file_path: &str) -> Result<Vec<QuestionData>, Box<dyn std::error::Error>> {
+    // Đọc và parse document
+    let doc_file = DocxFile::from_file(file_path)?;
+    let doc = doc_file.parse()?;
     
-    match read_tables_from_word(file_path) {
-        Ok(tables) => {
-            println!("Đã tìm thấy {} bảng trong file", tables.len());
-            
-            // In thông tin chi tiết về từng bảng
-            for (index, table) in tables.iter().enumerate() {
-                println!("Bảng #{}", index + 1);
-                if let BodyContent::Table(table_data) = table {
-                    println!("Số hàng: {}", table_data.rows.len());
-                    // Có thể thêm các thông tin khác về bảng ở đây
-                }
+    let mut questions = Vec::new();
+    
+    // Lặp qua các bảng trong document
+    for table in doc.document.body.tables() {
+        let mut current_question = QuestionData {
+            qn: String::new(),
+            question: String::new(),
+            options: Vec::new(),
+            answer: String::new(),
+            mark: String::new(),
+            unit: String::new(),
+            lo: String::new(),
+            mix_choices: String::new(),
+            creator_reviewer: String::new(),
+            editor: String::new(),
+            reference: String::new(),
+        };
+
+        // Lặp qua các hàng trong bảng
+        for (row_idx, row) in table.rows().iter().enumerate() {
+            if row.cells().len() < 2 {
+                continue;
             }
-        },
+
+            let key = row.cells()[0].text().trim().to_string();
+            let value = row.cells()[1].text().trim().to_string();
+
+            match key.as_str() {
+                "QN=" => current_question.qn = value,
+                "Which of the following best describes an array?" => current_question.question = value,
+                "a." | "b." | "c." | "d." => {
+                    if !value.is_empty() {
+                        current_question.options.push(value);
+                    }
+                }
+                "ANSWER:" => current_question.answer = value,
+                "MARK:" => current_question.mark = value,
+                "UNIT:" => current_question.unit = value,
+                "LO:" => current_question.lo = value,
+                "MIX CHOICES:" => current_question.mix_choices = value,
+                "CREATOR-REVIEWER:" => current_question.creator_reviewer = value,
+                "EDITOR:" => current_question.editor = value,
+                "REFERENCE:" => current_question.reference = value,
+                _ => {}
+            }
+        }
+
+        questions.push(current_question);
+    }
+
+    Ok(questions)
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let file_path = "C:/Users/Admin/Downloads/test2.docx"; // Thay đổi đường dẫn file của bạn
+    
+    match extract_questions_from_docx(file_path) {
+        Ok(questions) => {
+            for (i, q) in questions.iter().enumerate() {
+                println!("\n=== Câu hỏi {} ===", i + 1);
+                println!("QN: {}", q.qn);
+                println!("Câu hỏi: {}", q.question);
+                println!("Các lựa chọn:");
+                for (j, option) in q.options.iter().enumerate() {
+                    println!("  {}. {}", (b'a' + j as u8) as char, option);
+                }
+                println!("Đáp án: {}", q.answer);
+                println!("Điểm: {}", q.mark);
+                println!("Unit: {}", q.unit);
+                println!("LO: {}", q.lo);
+                println!("Mix choices: {}", q.mix_choices);
+                println!("Creator-Reviewer: {}", q.creator_reviewer);
+                println!("Editor: {}", q.editor);
+                println!("Reference: {}", q.reference);
+            }
+        }
         Err(e) => println!("Lỗi khi đọc file: {}", e),
     }
+    
+    Ok(())
 }
+

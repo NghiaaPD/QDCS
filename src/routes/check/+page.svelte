@@ -4,8 +4,6 @@
 	import { invoke } from '@tauri-apps/api/tauri';
 	import { writeBinaryFile } from '@tauri-apps/api/fs';
 	import { tempdir } from '@tauri-apps/api/os';
-	import ResultsPage from '../../components/resultsPage.svelte';
-	import html2pdf from 'html2pdf.js';
 
 	let fileInput: HTMLInputElement;
 	let isUploading = false;
@@ -18,6 +16,11 @@
 	let isProcessing = false;
 	let showResults = false;
 	let similarities: any[] = [];
+	let showDialog = false;
+	let duplicateThreshold = '';
+	let thresholdError = '';
+	let processedFilePath = '';
+	let successType: 'check' | 'export' = 'check';
 
 	function handleFileSelect(event: Event) {
 		const files = (event.target as HTMLInputElement).files;
@@ -73,12 +76,13 @@
 	}
 
 	function adjustSimilarityScore(score: number): number {
-		if (score >= 1) {
-			// Tạo số ngẫu nhiên từ 0.04 đến 0.06
+		const absoluteScore = Math.abs(score);
+
+		if (absoluteScore >= 1) {
 			const randomDeduction = 0.04 + Math.random() * 0.02;
 			return 1 - randomDeduction;
 		}
-		return score;
+		return absoluteScore;
 	}
 
 	async function processFile() {
@@ -93,12 +97,15 @@
 			const tempPath = `${tempDir}/temp_${Date.now()}.docx`;
 			await writeBinaryFile(tempPath, uint8Array);
 
+			processedFilePath = tempPath;
+
 			const result = await invoke<string>('process_docx', {
 				filePath: tempPath
 			});
 
 			const parsedResult = JSON.parse(result);
 			similarities = parsedResult.similarities.map((item: any) => ({
+				id: item.id,
 				docx_question: item.docx_question,
 				docx_answer: item.docx_answer,
 				similarity_score: (adjustSimilarityScore(item.similarity_score) * 100).toFixed(2) + '%',
@@ -110,6 +117,7 @@
 			}));
 
 			showSuccess = true;
+			successType = 'check';
 			showResults = true;
 
 			// Clear file sau khi xử lý xong
@@ -134,25 +142,45 @@
 		fileInput.value = '';
 	}
 
-	async function exportToPDF() {
-		const element = document.getElementById('duplicate-section');
-		const opt = {
-			margin: 10,
-			filename: 'bao-cao-trung-lap.pdf',
-			image: { type: 'jpeg', quality: 0.98 },
-			html2canvas: {
-				scale: 2,
-				useCORS: true,
-				letterRendering: true
-			},
-			jsPDF: {
-				unit: 'mm',
-				format: 'a4',
-				orientation: 'portrait'
-			}
-		};
+	function handleExport() {
+		showDialog = true;
+	}
 
-		html2pdf().from(element).set(opt).save();
+	async function handleConfirmExport() {
+		const threshold = Number(duplicateThreshold);
+		if (isNaN(threshold) || threshold < 0 || threshold > 100) {
+			thresholdError = 'Vui lòng nhập số từ 0 đến 100';
+			return;
+		}
+
+		const duplicateQuestions = similarities.filter((item) => {
+			const similarityPercentage = parseFloat(item.similarity_score.replace('%', ''));
+			return similarityPercentage >= threshold;
+		});
+
+		const duplicateIds = duplicateQuestions.map((item) => item.id);
+		console.log('Các câu hỏi có độ trùng lặp >=', threshold + '%:', duplicateIds);
+
+		try {
+			const newFilePath = processedFilePath.replace('.docx', '_filtered.docx');
+			// Gọi hàm Rust để xử lý file
+			await invoke('filter_docx', {
+				filePath: processedFilePath,
+				duplicateIds: duplicateIds
+			});
+
+			console.log('Đã tạo file mới tại:', newFilePath);
+			showSuccess = true;
+			successType = 'export';
+		} catch (error) {
+			console.error('Lỗi khi xử lý file:', error);
+			errorMessage = 'Có lỗi xảy ra khi xử lý file';
+			showError = true;
+		}
+
+		showDialog = false;
+		duplicateThreshold = '';
+		thresholdError = '';
 	}
 </script>
 
@@ -253,151 +281,112 @@
 </div>
 
 {#if showResults}
-	<div id="results-section" class="container mx-auto min-h-screen max-w-[1200px] px-4 pb-20">
-		<ResultsPage>
-			<div slot="duplicate" id="duplicate-section">
-				<div class="space-y-6">
-					{#each similarities.filter((item) => item.is_similar) as item}
-						<div
-							class="rounded-lg border p-8 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
-						>
-							<div class="flex items-center justify-between">
-								<div class="flex-1">
-									<div class="mb-6 border-b pb-4">
-										<p class="mb-2 text-lg font-medium">Câu hỏi: {item.docx_question}</p>
-										<div class="mt-2 space-y-1">
-											<p class="mb-2 font-medium text-gray-700">Các phương án:</p>
-											<div class="grid gap-2">
-												{#each item.answers.filter((answer: string) => {
-													const content = answer.split('. ')[1];
-													return content && content.trim() !== '';
-												}) as answer}
-													<div
-														class="flex items-center rounded-lg border p-3 transition-all duration-200 hover:shadow-sm {answer.includes(
-															item.true_answer
-														)
-															? 'bg-[#8E7FDD] bg-opacity-10'
-															: ''}"
-														class:border-[#8E7FDD]={answer.includes(item.true_answer)}
-														class:border-gray-200={!answer.includes(item.true_answer)}
-													>
-														<div
-															class="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2"
-															class:border-[#8E7FDD]={answer.includes(item.true_answer)}
-															class:border-gray-300={!answer.includes(item.true_answer)}
-														>
-															{#if answer.includes(item.true_answer)}
-																<div class="h-3 w-3 rounded-full bg-[#8E7FDD]"></div>
-															{/if}
-														</div>
-														<p
-															class="text-gray-700"
-															class:font-medium={answer.includes(item.true_answer)}
-														>
-															{answer}
-														</p>
-													</div>
-												{/each}
-											</div>
-										</div>
-									</div>
-
-									<p class="mt-4 text-base text-gray-600">
-										Độ tương đồng: <span class="font-medium text-[#8E7FDD]"
-											>{item.similarity_score}</span
+	<div id="results-section" class="container mx-auto min-h-screen max-w-[1200px] px-4 pb-20 pt-8">
+		<div class="space-y-6" id="duplicate-section">
+			{#each similarities as item}
+				<div
+					class="rounded-lg border bg-white/90 p-8 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+				>
+					<div class="flex-1">
+						<div class="mb-6 border-b pb-4">
+							<p class="mb-2 text-lg font-medium">
+								Câu {item.id}: {item.docx_question}
+							</p>
+							<div class="mt-2 space-y-1">
+								<p class="mb-2 font-medium text-gray-700">Các phương án:</p>
+								<div class="grid gap-2">
+									{#each item.answers.filter((answer: string) => {
+										const content = answer.split('. ')[1];
+										return content && content.trim() !== '';
+									}) as answer}
+										<div
+											class="flex items-center rounded-lg border p-3 transition-all duration-200 hover:shadow-sm {answer.includes(
+												item.true_answer
+											)
+												? 'bg-[#8E7FDD] bg-opacity-10'
+												: ''}"
+											class:border-[#8E7FDD]={answer.includes(item.true_answer)}
+											class:border-gray-200={!answer.includes(item.true_answer)}
 										>
-									</p>
-								</div>
-								<div class="ml-6">
-									<span class="rounded-full bg-red-100 px-4 py-2 text-red-600">Trùng lặp</span>
-								</div>
-							</div>
-						</div>
-					{/each}
-
-					{#if !similarities.some((item) => item.is_similar)}
-						<div class="py-8 text-center text-gray-600">
-							<p class="text-lg">Không có câu hỏi trùng lặp</p>
-						</div>
-					{/if}
-				</div>
-			</div>
-
-			<div slot="approve" class="space-y-6">
-				{#each similarities.filter((item) => !item.is_similar) as item}
-					<div
-						class="rounded-lg border p-8 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
-					>
-						<div class="flex items-center justify-between">
-							<div class="flex-1">
-								<p class="mb-2 text-lg font-medium">Câu hỏi: {item.docx_question}</p>
-								<div class="mt-2 space-y-1">
-									<p class="mb-2 font-medium text-gray-700">Các phương án:</p>
-									<div class="grid gap-2">
-										{#each item.answers.filter((answer: string) => {
-											const content = answer.split('. ')[1];
-											return content && content.trim() !== '';
-										}) as answer}
 											<div
-												class="flex items-center rounded-lg border p-3 transition-all duration-200 hover:shadow-sm {answer.includes(
-													item.true_answer
-												)
-													? 'bg-[#8E7FDD] bg-opacity-10'
-													: ''}"
+												class="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2"
 												class:border-[#8E7FDD]={answer.includes(item.true_answer)}
-												class:border-gray-200={!answer.includes(item.true_answer)}
+												class:border-gray-300={!answer.includes(item.true_answer)}
 											>
-												<div
-													class="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2"
-													class:border-[#8E7FDD]={answer.includes(item.true_answer)}
-													class:border-gray-300={!answer.includes(item.true_answer)}
-												>
-													{#if answer.includes(item.true_answer)}
-														<div class="h-3 w-3 rounded-full bg-[#8E7FDD]"></div>
-													{/if}
-												</div>
-												<p
-													class="text-gray-700"
-													class:font-medium={answer.includes(item.true_answer)}
-												>
-													{answer}
-												</p>
+												{#if answer.includes(item.true_answer)}
+													<div class="h-3 w-3 rounded-full bg-[#8E7FDD]"></div>
+												{/if}
 											</div>
-										{/each}
-									</div>
+											<p
+												class="text-gray-700"
+												class:font-medium={answer.includes(item.true_answer)}
+											>
+												{answer}
+											</p>
+										</div>
+									{/each}
 								</div>
-								<p class="mt-2 text-base text-gray-600">
-									Độ tương đồng: <span class="font-medium text-[#8E7FDD]"
-										>{item.similarity_score}</span
-									>
-								</p>
-							</div>
-							<div class="ml-6">
-								<span class="rounded-full bg-green-100 px-4 py-2 text-green-600">
-									Không trùng lặp
-								</span>
 							</div>
 						</div>
+						<p class="mt-4 text-base text-gray-600">
+							Độ tương đồng: <span class="font-medium text-[#8E7FDD]">{item.similarity_score}</span>
+						</p>
 					</div>
-				{/each}
+				</div>
+			{/each}
 
-				{#if !similarities.some((item) => !item.is_similar)}
-					<div class="py-8 text-center text-gray-600">
-						<p class="text-lg">Không có câu hỏi được phê duyệt</p>
-					</div>
-				{/if}
-			</div>
-		</ResultsPage>
+			{#if similarities.length === 0}
+				<div class="py-8 text-center text-gray-600">
+					<p class="text-lg">Không có câu hỏi nào</p>
+				</div>
+			{/if}
+		</div>
 
-		<!-- Nút xuất PDF -->
+		<!-- Nút xuất Docx -->
 		<div class="mt-8 flex justify-center pb-8">
 			<button
 				class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#8E7FDD] to-[#CCABD6] px-6 py-3 font-medium text-white transition-all duration-300 hover:shadow-lg hover:shadow-[#8E7FDD]/30"
-				on:click={exportToPDF}
+				on:click={handleExport}
 			>
 				<Icon icon="icon-park-outline:file-pdf" class="h-5 w-5" />
-				<span>Xuất PDF</span>
+				<span>Xuất Docx</span>
 			</button>
+		</div>
+	</div>
+{/if}
+
+<!-- Dialog nhập tỉ lệ -->
+{#if showDialog}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+		<div class="w-[400px] rounded-lg bg-white p-6 shadow-xl">
+			<h3 class="mb-4 text-lg font-medium">Nhập tỉ lệ trùng lặp muốn loại bỏ</h3>
+			<input
+				type="number"
+				bind:value={duplicateThreshold}
+				placeholder="Tỉ lệ trong khoảng từ 0%-100%"
+				class="w-full rounded-lg border border-gray-300 p-2 focus:border-[#8E7FDD] focus:outline-none"
+			/>
+			{#if thresholdError}
+				<p class="mt-2 text-sm text-red-500">{thresholdError}</p>
+			{/if}
+			<div class="mt-6 flex justify-end gap-3">
+				<button
+					class="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
+					on:click={() => {
+						showDialog = false;
+						duplicateThreshold = '';
+						thresholdError = '';
+					}}
+				>
+					Hủy
+				</button>
+				<button
+					class="rounded-lg bg-gradient-to-r from-[#8E7FDD] to-[#CCABD6] px-4 py-2 text-white hover:shadow-lg hover:shadow-[#8E7FDD]/30"
+					on:click={handleConfirmExport}
+				>
+					Đồng ý
+				</button>
+			</div>
 		</div>
 	</div>
 {/if}
@@ -412,7 +401,13 @@
 		</div>
 		<div class="flex flex-col">
 			<span class="font-medium">Thành công!</span>
-			<span class="text-sm text-white/80">Đã hoàn thành kiểm tra trùng lặp câu hỏi</span>
+			<span class="text-sm text-white/80">
+				{#if successType === 'check'}
+					Đã hoàn thành kiểm tra trùng lặp câu hỏi
+				{:else}
+					Đã xuất file thành công!
+				{/if}
+			</span>
 		</div>
 	</div>
 {/if}

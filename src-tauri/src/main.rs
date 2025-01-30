@@ -10,6 +10,9 @@ use std::path::PathBuf;
 use serde_json;
 use functions::cosine_calculate::calculate_cosine_similarity;
 use functions::plot_similarity::calculate_similarity_score;
+use docx_rust::DocxFile;
+use docx_rust::document::BodyContent;
+use crate::middleware::fill_format::extract_cell_text;
 
 #[tauri::command]
 async fn process_docx(file_path: String) -> Result<String, String> {
@@ -21,15 +24,9 @@ async fn process_docx(file_path: String) -> Result<String, String> {
     match (docx_result, db_result) {
         (Ok(questions), Ok(embeddings)) => {
             let mut results = Vec::new();
-            let mut processed_questions = std::collections::HashSet::new();
             
             // Check similarity between docx questions
             for (i, docx_item1) in questions.iter().enumerate() {
-                // Nếu câu hỏi đã được xử lý thì bỏ qua
-                if processed_questions.contains(&docx_item1.text) {
-                    continue;
-                }
-                
                 let mut found_similar = false;
                 
                 // Check với các câu hỏi khác trong docx
@@ -47,25 +44,25 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                         
                         if question_similarity > 0.5 && answer_similarity > 0.5 {
                             results.push(serde_json::json!({
+                                "id": docx_item1.id,
                                 "docx_question": docx_item1.text,
                                 "docx_answer": docx_item1.correct_answer,
                                 "answers": docx_item1.answers,
                                 "true_answer": docx_item1.correct_answer,
                                 "similar_docx_question": docx_item2.text,
                                 "similar_docx_answer": docx_item2.correct_answer,
+                                "similar_answers": docx_item2.answers,
+                                "similar_true_answer": docx_item2.correct_answer,
                                 "similarity_score": calculate_similarity_score(question_similarity, answer_similarity),
                                 "is_similar": true
                             }));
                             found_similar = true;
-                            processed_questions.insert(docx_item1.text.clone());
-                            processed_questions.insert(docx_item2.text.clone());
-                            break;
                         }
                     }
                 }
                 
-                // Nếu chưa tìm thấy trùng lặp trong docx, kiểm tra với database
-                if !found_similar && !processed_questions.contains(&docx_item1.text) {
+                // Kiểm tra với database nếu chưa tìm thấy trùng trong docx
+                if !found_similar {
                     let mut max_similarity = None;
                     
                     for db_item in &embeddings {
@@ -81,6 +78,7 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                         
                         if question_similarity > 0.5 && answer_similarity > 0.5 {
                             results.push(serde_json::json!({
+                                "id": docx_item1.id,
                                 "docx_question": docx_item1.text,
                                 "docx_answer": docx_item1.correct_answer,
                                 "answers": docx_item1.answers,
@@ -90,7 +88,6 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                                 "similarity_score": calculate_similarity_score(question_similarity, answer_similarity),
                                 "is_similar": true
                             }));
-                            processed_questions.insert(docx_item1.text.clone());
                             found_similar = true;
                             break;
                         } else {
@@ -109,6 +106,7 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                     if !found_similar {
                         if let Some((_db_item, (q_sim, a_sim), _)) = max_similarity {
                             results.push(serde_json::json!({
+                                "id": docx_item1.id,
                                 "docx_question": docx_item1.text,
                                 "docx_answer": docx_item1.correct_answer,
                                 "answers": docx_item1.answers,
@@ -118,7 +116,6 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                                 "similarity_score": calculate_similarity_score(q_sim, a_sim),
                                 "is_similar": false
                             }));
-                            processed_questions.insert(docx_item1.text.clone());
                         }
                     }
                 }
@@ -134,9 +131,49 @@ async fn process_docx(file_path: String) -> Result<String, String> {
     }
 }
 
+#[tauri::command]
+async fn filter_docx(file_path: String, duplicate_ids: Vec<String>) -> Result<(), String> {
+    
+    // Đọc file gốc
+    let doc_file = DocxFile::from_file(&file_path)
+        .map_err(|e| e.to_string())?;
+    let mut docx = doc_file.parse()
+        .map_err(|e| e.to_string())?;
+
+    // Chuyển duplicate_ids thành Vec<i32>
+    let duplicate_numbers: Vec<i32> = duplicate_ids
+        .iter()
+        .filter_map(|id| id.parse::<i32>().ok())
+        .collect();
+
+    // Lọc các table không nằm trong danh sách duplicate_ids
+    docx.document.body.content.retain(|content| {
+        if let BodyContent::Table(table) = content {
+            if let Some(first_row) = table.rows.first() {
+                if let Some(first_cell) = first_row.cells.first() {
+                    let cell_text = extract_cell_text(first_cell).trim().to_string();
+                    
+                    if let Some(id_str) = cell_text.strip_prefix("QN=") {
+                        if let Ok(id_num) = id_str.trim().parse::<i32>() {
+                            return !duplicate_numbers.contains(&id_num);
+                        }
+                    }
+                }
+            }
+        }
+        true
+    });
+
+    // Đổi đường dẫn file mới thành ./filter.docx
+    docx.write_file("./filter.docx")
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![process_docx])
+        .invoke_handler(tauri::generate_handler![process_docx, filter_docx])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

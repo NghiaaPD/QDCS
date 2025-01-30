@@ -1,4 +1,4 @@
-<script lang="ts">
+<!-- <script lang="ts">
 	import { goto } from '$app/navigation';
 
 	interface Subject {
@@ -148,4 +148,10 @@
 			>
 		</p>
 	</div>
-</div>
+</div> -->
+
+<script lang="ts">
+	import CheckPage from './check/+page.svelte';
+</script>
+
+<CheckPage />

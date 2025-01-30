@@ -11,7 +11,7 @@ lazy_static! {
     ).expect("Không thể khởi tạo model embedding");
 }
 
-fn extract_cell_text(cell: &TableRowContent) -> String {
+pub fn extract_cell_text(cell: &TableRowContent) -> String {
     match cell {
         TableRowContent::TableCell(cell_data) => {
             cell_data.content.iter().fold(String::new(), |acc, content| {
