@@ -21,6 +21,7 @@
 	let thresholdError = '';
 	let processedFilePath = '';
 	let successType: 'check' | 'export' = 'check';
+	let isExporting = false;
 
 	function handleFileSelect(event: Event) {
 		const files = (event.target as HTMLInputElement).files;
@@ -104,7 +105,22 @@
 			});
 
 			const parsedResult = JSON.parse(result);
-			similarities = parsedResult.similarities.map((item: any) => ({
+
+			// Tạo Map để lưu kết quả có độ trùng cao nhất cho mỗi ID
+			const bestResults = new Map();
+
+			// Duyệt qua tất cả kết quả để tìm độ trùng cao nhất cho mỗi ID
+			parsedResult.similarities.forEach((item: any) => {
+				const currentScore = parseFloat(item.similarity_score);
+				const existingResult = bestResults.get(item.id);
+
+				if (!existingResult || parseFloat(existingResult.similarity_score) < currentScore) {
+					bestResults.set(item.id, item);
+				}
+			});
+
+			// Chuyển Map thành mảng kết quả cuối cùng
+			similarities = Array.from(bestResults.values()).map((item: any) => ({
 				id: item.id,
 				docx_question: item.docx_question,
 				docx_answer: item.docx_answer,
@@ -113,14 +129,17 @@
 				answers: item.answers,
 				true_answer: item.true_answer,
 				similar_docx_question: item.similar_docx_question,
-				similar_docx_answer: item.similar_docx_answer
+				similar_docx_answer: item.similar_docx_answer,
+				similar_answers: item.similar_answers,
+				similar_true_answer: item.similar_true_answer,
+				db_question: item.db_question,
+				db_answer: item.db_answer
 			}));
 
 			showSuccess = true;
 			successType = 'check';
 			showResults = true;
 
-			// Clear file sau khi xử lý xong
 			removeFile();
 
 			setTimeout(() => {
@@ -153,17 +172,17 @@
 			return;
 		}
 
+		isExporting = true;
+
 		const duplicateQuestions = similarities.filter((item) => {
 			const similarityPercentage = parseFloat(item.similarity_score.replace('%', ''));
 			return similarityPercentage >= threshold;
 		});
 
 		const duplicateIds = duplicateQuestions.map((item) => item.id);
-		console.log('Các câu hỏi có độ trùng lặp >=', threshold + '%:', duplicateIds);
 
 		try {
 			const newFilePath = processedFilePath.replace('.docx', '_filtered.docx');
-			// Gọi hàm Rust để xử lý file
 			await invoke('filter_docx', {
 				filePath: processedFilePath,
 				duplicateIds: duplicateIds
@@ -176,11 +195,12 @@
 			console.error('Lỗi khi xử lý file:', error);
 			errorMessage = 'Có lỗi xảy ra khi xử lý file';
 			showError = true;
+		} finally {
+			isExporting = false;
+			showDialog = false;
+			duplicateThreshold = '';
+			thresholdError = '';
 		}
-
-		showDialog = false;
-		duplicateThreshold = '';
-		thresholdError = '';
 	}
 </script>
 
@@ -365,26 +385,36 @@
 				bind:value={duplicateThreshold}
 				placeholder="Tỉ lệ trong khoảng từ 0%-100%"
 				class="w-full rounded-lg border border-gray-300 p-2 focus:border-[#8E7FDD] focus:outline-none"
+				disabled={isExporting}
 			/>
 			{#if thresholdError}
 				<p class="mt-2 text-sm text-red-500">{thresholdError}</p>
 			{/if}
 			<div class="mt-6 flex justify-end gap-3">
 				<button
-					class="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50"
+					class="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
 					on:click={() => {
 						showDialog = false;
 						duplicateThreshold = '';
 						thresholdError = '';
 					}}
+					disabled={isExporting}
 				>
 					Hủy
 				</button>
 				<button
-					class="rounded-lg bg-gradient-to-r from-[#8E7FDD] to-[#CCABD6] px-4 py-2 text-white hover:shadow-lg hover:shadow-[#8E7FDD]/30"
+					class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#8E7FDD] to-[#CCABD6] px-4 py-2 text-white hover:shadow-lg hover:shadow-[#8E7FDD]/30 disabled:cursor-not-allowed disabled:opacity-50"
 					on:click={handleConfirmExport}
+					disabled={isExporting}
 				>
-					Đồng ý
+					{#if isExporting}
+						<div
+							class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+						></div>
+						<span>Đang xuất file...</span>
+					{:else}
+						<span>Đồng ý</span>
+					{/if}
 				</button>
 			</div>
 		</div>
