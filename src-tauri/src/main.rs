@@ -54,6 +54,7 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                                 "similar_answers": docx_item2.answers,
                                 "similar_true_answer": docx_item2.correct_answer,
                                 "similarity_score": calculate_similarity_score(question_similarity, answer_similarity),
+                                "duplicate_type": "docx",
                                 "is_similar": true
                             }));
                             found_similar = true;
@@ -86,6 +87,7 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                                 "db_question": "Question from DB",
                                 "db_answer": "Answer from DB",
                                 "similarity_score": calculate_similarity_score(question_similarity, answer_similarity),
+                                "duplicate_type": "db",
                                 "is_similar": true
                             }));
                             found_similar = true;
@@ -114,6 +116,7 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                                 "db_question": "Question from DB",
                                 "db_answer": "Answer from DB",
                                 "similarity_score": calculate_similarity_score(q_sim, a_sim),
+                                "duplicate_type": "db",
                                 "is_similar": false
                             }));
                         }

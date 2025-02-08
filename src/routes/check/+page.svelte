@@ -2,7 +2,7 @@
 	import Icon from '@iconify/svelte';
 	import { fade } from 'svelte/transition';
 	import { invoke } from '@tauri-apps/api/tauri';
-	import { writeBinaryFile } from '@tauri-apps/api/fs';
+	import { writeBinaryFile, readTextFile } from '@tauri-apps/api/fs';
 	import { tempdir } from '@tauri-apps/api/os';
 
 	let fileInput: HTMLInputElement;
@@ -133,7 +133,8 @@
 				similar_answers: item.similar_answers,
 				similar_true_answer: item.similar_true_answer,
 				db_question: item.db_question,
-				db_answer: item.db_answer
+				db_answer: item.db_answer,
+				duplicate_type: item.duplicate_type
 			}));
 
 			showSuccess = true;
@@ -161,45 +162,49 @@
 		fileInput.value = '';
 	}
 
-	function handleExport() {
-		showDialog = true;
-	}
-
-	async function handleConfirmExport() {
-		const threshold = Number(duplicateThreshold);
-		if (isNaN(threshold) || threshold < 0 || threshold > 100) {
-			thresholdError = 'Vui lòng nhập số từ 0 đến 100';
-			return;
-		}
-
-		isExporting = true;
-
-		const duplicateQuestions = similarities.filter((item) => {
-			const similarityPercentage = parseFloat(item.similarity_score.replace('%', ''));
-			return similarityPercentage >= threshold;
-		});
-
-		const duplicateIds = duplicateQuestions.map((item) => item.id);
-
+	async function handleExport() {
 		try {
-			const newFilePath = processedFilePath.replace('.docx', '_filtered.docx');
-			await invoke('filter_docx', {
-				filePath: processedFilePath,
-				duplicateIds: duplicateIds
+			// Đọc giá trị từ configs.json
+			const configContent = await readTextFile('configs.json');
+			const config = JSON.parse(configContent);
+			const threshold = config.Value / (-2 / 35); // Chuyển đổi thành phần trăm
+
+			console.log('Ngưỡng xuất file:', threshold.toFixed(2) + '%');
+
+			isExporting = true;
+			// Sửa lại logic lọc - giữ lại những câu có tỉ lệ trùng THẤP HƠN ngưỡng
+			const duplicateQuestions = similarities.filter((item) => {
+				const similarityPercentage = parseFloat(item.similarity_score.replace('%', ''));
+				console.log(
+					`Câu ${item.id}: ${similarityPercentage}% ${similarityPercentage >= threshold ? '(Loại bỏ)' : '(Giữ lại)'}`
+				);
+				return similarityPercentage < threshold; // Thay đổi từ >= thành <
 			});
 
-			console.log('Đã tạo file mới tại:', newFilePath);
-			showSuccess = true;
-			successType = 'export';
+			const duplicateIds = duplicateQuestions.map((item) => item.id);
+
+			try {
+				const newFilePath = processedFilePath.replace('.docx', '_filtered.docx');
+				await invoke('filter_docx', {
+					filePath: processedFilePath,
+					duplicateIds: duplicateIds
+				});
+
+				console.log('Đã tạo file mới tại:', newFilePath);
+				console.log('Số câu được giữ lại:', duplicateIds.length);
+				showSuccess = true;
+				successType = 'export';
+			} catch (error) {
+				console.error('Lỗi khi xử lý file:', error);
+				errorMessage = 'Có lỗi xảy ra khi xử lý file';
+				showError = true;
+			} finally {
+				isExporting = false;
+			}
 		} catch (error) {
-			console.error('Lỗi khi xử lý file:', error);
-			errorMessage = 'Có lỗi xảy ra khi xử lý file';
+			console.error('Lỗi khi đọc file config:', error);
+			errorMessage = 'Có lỗi xảy ra khi đọc cấu hình';
 			showError = true;
-		} finally {
-			isExporting = false;
-			showDialog = false;
-			duplicateThreshold = '';
-			thresholdError = '';
 		}
 	}
 </script>
@@ -348,9 +353,24 @@
 								</div>
 							</div>
 						</div>
-						<p class="mt-4 text-base text-gray-600">
-							Độ tương đồng: <span class="font-medium text-[#8E7FDD]">{item.similarity_score}</span>
-						</p>
+						<div class="mt-4 flex items-center gap-2">
+							<span class="text-base text-gray-600">Trạng thái:</span>
+							{#if item.is_similar}
+								{#if item.duplicate_type === 'docx'}
+									<span class="rounded-full bg-yellow-500 px-3 py-1 text-sm font-medium text-white">
+										Trùng trong file Docx
+									</span>
+								{:else if item.duplicate_type === 'db'}
+									<span class="rounded-full bg-red-500 px-3 py-1 text-sm font-medium text-white">
+										Trùng trong Database
+									</span>
+								{/if}
+							{:else}
+								<span class="rounded-full bg-green-500 px-3 py-1 text-sm font-medium text-white">
+									Không trùng lặp
+								</span>
+							{/if}
+						</div>
 					</div>
 				</div>
 			{/each}
@@ -367,56 +387,18 @@
 			<button
 				class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#8E7FDD] to-[#CCABD6] px-6 py-3 font-medium text-white transition-all duration-300 hover:shadow-lg hover:shadow-[#8E7FDD]/30"
 				on:click={handleExport}
-			>
-				<Icon icon="icon-park-outline:file-pdf" class="h-5 w-5" />
-				<span>Xuất Docx</span>
-			</button>
-		</div>
-	</div>
-{/if}
-
-<!-- Dialog nhập tỉ lệ -->
-{#if showDialog}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-		<div class="w-[400px] rounded-lg bg-white p-6 shadow-xl">
-			<h3 class="mb-4 text-lg font-medium">Nhập tỉ lệ trùng lặp muốn loại bỏ</h3>
-			<input
-				type="number"
-				bind:value={duplicateThreshold}
-				placeholder="Tỉ lệ trong khoảng từ 0%-100%"
-				class="w-full rounded-lg border border-gray-300 p-2 focus:border-[#8E7FDD] focus:outline-none"
 				disabled={isExporting}
-			/>
-			{#if thresholdError}
-				<p class="mt-2 text-sm text-red-500">{thresholdError}</p>
-			{/if}
-			<div class="mt-6 flex justify-end gap-3">
-				<button
-					class="rounded-lg border border-gray-300 px-4 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-					on:click={() => {
-						showDialog = false;
-						duplicateThreshold = '';
-						thresholdError = '';
-					}}
-					disabled={isExporting}
-				>
-					Hủy
-				</button>
-				<button
-					class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#8E7FDD] to-[#CCABD6] px-4 py-2 text-white hover:shadow-lg hover:shadow-[#8E7FDD]/30 disabled:cursor-not-allowed disabled:opacity-50"
-					on:click={handleConfirmExport}
-					disabled={isExporting}
-				>
-					{#if isExporting}
-						<div
-							class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-						></div>
-						<span>Đang xuất file...</span>
-					{:else}
-						<span>Đồng ý</span>
-					{/if}
-				</button>
-			</div>
+			>
+				{#if isExporting}
+					<div
+						class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+					></div>
+					<span>Đang xuất file...</span>
+				{:else}
+					<Icon icon="icon-park-outline:file-pdf" class="h-5 w-5" />
+					<span>Xuất Docx</span>
+				{/if}
+			</button>
 		</div>
 	</div>
 {/if}
