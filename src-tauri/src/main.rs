@@ -116,7 +116,6 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                                 "db_question": "Question from DB",
                                 "db_answer": "Answer from DB",
                                 "similarity_score": calculate_similarity_score(q_sim, a_sim),
-                                "duplicate_type": "db",
                                 "is_similar": false
                             }));
                         }
@@ -136,7 +135,6 @@ async fn process_docx(file_path: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn filter_docx(file_path: String, duplicate_ids: Vec<String>) -> Result<(), String> {
-    
     // Đọc file gốc
     let doc_file = DocxFile::from_file(&file_path)
         .map_err(|e| e.to_string())?;
@@ -149,7 +147,7 @@ async fn filter_docx(file_path: String, duplicate_ids: Vec<String>) -> Result<()
         .filter_map(|id| id.parse::<i32>().ok())
         .collect();
 
-    // Lọc các table không nằm trong danh sách duplicate_ids
+    // Lọc các table - THAY ĐỔI LOGIC Ở ĐÂY
     docx.document.body.content.retain(|content| {
         if let BodyContent::Table(table) = content {
             if let Some(first_row) = table.rows.first() {
@@ -158,7 +156,7 @@ async fn filter_docx(file_path: String, duplicate_ids: Vec<String>) -> Result<()
                     
                     if let Some(id_str) = cell_text.strip_prefix("QN=") {
                         if let Ok(id_num) = id_str.trim().parse::<i32>() {
-                            return !duplicate_numbers.contains(&id_num);
+                            return duplicate_numbers.contains(&id_num);
                         }
                     }
                 }

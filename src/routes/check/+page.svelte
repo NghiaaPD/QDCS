@@ -167,7 +167,7 @@
 			// Đọc giá trị từ configs.json
 			const configContent = await readTextFile('configs.json');
 			const config = JSON.parse(configContent);
-			const threshold = config.Value / (-2 / 35); // Chuyển đổi thành phần trăm
+			const threshold = config.Value / (-2 / 35);
 
 			console.log('Ngưỡng xuất file:', threshold.toFixed(2) + '%');
 
