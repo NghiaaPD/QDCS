@@ -365,22 +365,17 @@
 									<span class="rounded-full bg-yellow-500 px-3 py-1 text-sm font-medium text-white">
 										Trùng trong file Docx
 									</span>
-									{#if !isNaN(item.question_similarity) && !isNaN(item.answer_similarity)}
-										<span class="text-sm text-gray-600">
-											Q: {(item.question_similarity * 100).toFixed(2)}% | A: {(
-												item.answer_similarity * 100
-											).toFixed(2)}%
-										</span>
-									{/if}
 								{:else if item.duplicate_type === 'db'}
 									<span class="rounded-full bg-red-500 px-3 py-1 text-sm font-medium text-white">
 										Trùng trong Database
 									</span>
-									{#if !isNaN(item.question_similarity) && !isNaN(item.answer_similarity)}
+								{:else if item.duplicate_type === 'internal'}
+									<span class="rounded-full bg-purple-500 px-3 py-1 text-sm font-medium text-white">
+										Trùng trong câu hỏi
+									</span>
+									{#if item.duplicate_answers}
 										<span class="text-sm text-gray-600">
-											Q: {(item.question_similarity * 100).toFixed(2)}% | A: {(
-												item.answer_similarity * 100
-											).toFixed(2)}%
+											Độ tương đồng: {(item.duplicate_answers.similarity * 100).toFixed(2)}%
 										</span>
 									{/if}
 								{/if}

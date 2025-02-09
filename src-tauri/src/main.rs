@@ -16,10 +16,12 @@ use crate::middleware::fill_format::extract_cell_text;
 use crate::middleware::fill_format::EMBEDDING_MODEL;
 use std::collections::HashMap;
 use crate::services::load_accurancy::load_similarity_threshold;
+use crate::middleware::check_duplicate_answers::check_duplicate_answers;
 
 #[tauri::command]
 async fn process_docx(file_path: String) -> Result<String, String> {
     let similarity_threshold = load_similarity_threshold()?;
+    
     let path = PathBuf::from(file_path);
     let docx_result = read_docx_content(path.to_str().unwrap_or(""));
     let db_result = query_db();
@@ -30,6 +32,27 @@ async fn process_docx(file_path: String) -> Result<String, String> {
             let mut similarity_cache: HashMap<(String, String), (f32, f32)> = HashMap::new();
             
             for (i, docx_item1) in questions.iter().enumerate() {
+                // Check trùng lặp trong cùng câu hỏi trước
+                if let Some((ans1, ans2, similarity)) = check_duplicate_answers(&docx_item1.answers) {
+                    results.push(serde_json::json!({
+                        "id": docx_item1.id,
+                        "docx_question": docx_item1.text,
+                        "docx_answer": docx_item1.correct_answers,
+                        "answers": docx_item1.answers,
+                        "true_answers": docx_item1.correct_answers,
+                        "correct_answer_keys": docx_item1.correct_answer_keys,
+                        "duplicate_answers": {
+                            "answer1": ans1,
+                            "answer2": ans2,
+                            "similarity": similarity
+                        },
+                        "duplicate_type": "internal",
+                        "is_similar": true
+                    }));
+                    continue;  // Bỏ qua các check khác nếu phát hiện trùng nội bộ
+                }
+                
+                // Tiếp tục với logic check trùng hiện tại nếu không có trùng nội bộ
                 let mut found_similar = false;
                 
                 for (j, docx_item2) in questions.iter().enumerate() {
