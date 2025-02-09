@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 
 lazy_static! {
-    static ref EMBEDDING_MODEL: TextEmbedding = TextEmbedding::try_new(
+    pub static ref EMBEDDING_MODEL: TextEmbedding = TextEmbedding::try_new(
         InitOptions::new(EmbeddingModel::AllMiniLML6V2)
             .with_show_download_progress(true)
     ).expect("Không thể khởi tạo model embedding");
@@ -40,7 +40,8 @@ pub struct Question {
     pub id: String,
     pub text: String,
     pub answers: Vec<String>,
-    pub correct_answer: String,
+    pub correct_answers: Vec<String>,
+    pub correct_answer_keys: Vec<String>,
     pub question_embedding: Vec<f32>,
     pub answer_embedding: Vec<f32>,
 }
@@ -60,7 +61,8 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
                 id: String::new(),
                 text: String::new(),
                 answers: Vec::new(),
-                correct_answer: String::new(),
+                correct_answers: Vec::new(),
+                correct_answer_keys: Vec::new(),
                 question_embedding: Vec::new(),
                 answer_embedding: Vec::new(),
             };
@@ -81,7 +83,7 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
 
             // Map để lưu trữ các câu trả lời theo key (A, B, C, D)
             let mut answer_texts: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-            let mut correct_answer_key = String::new();
+            let mut correct_answer_keys = Vec::new();
 
             // Thu thập các câu trả lời và ANSWER
             for row in table.rows.iter() {
@@ -100,14 +102,20 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
                 // Nếu là dòng ANSWER
                 if first_cell == "ANSWER:" {
                     if let Some(cell) = row.cells.get(1) {
-                        correct_answer_key = extract_cell_text(cell).trim().to_uppercase().to_string();
+                        let answer_text = extract_cell_text(cell).trim().to_uppercase();
+                        correct_answer_keys = answer_text.split(',')
+                            .map(|s| s.trim().to_string())
+                            .collect();
+                        question.correct_answer_keys = correct_answer_keys.clone();
                     }
                 }
             }
 
-            // Lấy câu trả lời đúng từ map
-            if let Some(correct_text) = answer_texts.get(&correct_answer_key) {
-                question.correct_answer = correct_text.clone();
+            // Lấy tất cả câu trả lời đúng từ map
+            for key in correct_answer_keys {
+                if let Some(answer_text) = answer_texts.get(&key) {
+                    question.correct_answers.push(answer_text.clone());
+                }
             }
 
             // Kiểm tra và tạo embeddings
@@ -117,17 +125,20 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
             if question.text.is_empty() {
                 return Err(format!("File sai format: Câu hỏi {} thiếu nội dung", question.id).into());
             }
-            if question.correct_answer.is_empty() {
+            if question.correct_answers.is_empty() {
                 return Err(format!("File sai format: Câu hỏi {} thiếu đáp án đúng", question.id).into());
             }
 
+            // Tạo embedding cho câu hỏi
             question.question_embedding = EMBEDDING_MODEL.embed(
                 vec![&question.text], 
                 None
             )?.remove(0);
             
+            // Tạo embedding cho tất cả đáp án đúng ghép lại
+            let combined_answers = question.correct_answers.join(" ");
             question.answer_embedding = EMBEDDING_MODEL.embed(
-                vec![&question.correct_answer], 
+                vec![&combined_answers], 
                 None
             )?.remove(0);
 
@@ -139,11 +150,26 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
 }
 
 // fn main() {
-//     let file_path = "C:\\Users\\Admin\\Downloads\\test.docx"; 
+//     let file_path = "C:\\Users\\Admin\\Downloads\\dbtest.docx"; 
 //     match read_docx_content(file_path) {
-//         Ok(_) => println!("Đã đọc file thành công"),
+//         Ok(questions) => {
+//             println!("Đã đọc file thành công!\n");
+//             for question in questions {
+//                 println!("ID: {}", question.id);
+//                 println!("Câu hỏi: {}", question.text);
+//                 println!("Các phương án trả lời:");
+//                 for answer in &question.answers {
+//                     println!("  {}", answer);
+//                 }
+//                 println!("Đáp án đúng:");
+//                 for (i, correct_answer) in question.correct_answers.iter().enumerate() {
+//                     println!("  {}. {}", i + 1, correct_answer);
+//                 }
+//                 println!("Kích thước embedding câu hỏi: {}", question.question_embedding.len());
+//                 println!("Kích thước embedding đáp án: {}", question.answer_embedding.len());
+//                 println!("----------------------------------------\n");
+//             }
+//         },
 //         Err(e) => println!("Lỗi khi đọc file: {}", e),
-//     }
-// }
 //     }
 // }

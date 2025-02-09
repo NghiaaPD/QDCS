@@ -16,9 +16,6 @@
 	let isProcessing = false;
 	let showResults = false;
 	let similarities: any[] = [];
-	let showDialog = false;
-	let duplicateThreshold = '';
-	let thresholdError = '';
 	let processedFilePath = '';
 	let successType: 'check' | 'export' = 'check';
 	let isExporting = false;
@@ -134,7 +131,8 @@
 				similar_true_answer: item.similar_true_answer,
 				db_question: item.db_question,
 				db_answer: item.db_answer,
-				duplicate_type: item.duplicate_type
+				duplicate_type: item.duplicate_type,
+				correct_answer_keys: item.correct_answer_keys
 			}));
 
 			showSuccess = true;
@@ -320,31 +318,38 @@
 							<div class="mt-2 space-y-1">
 								<p class="mb-2 font-medium text-gray-700">Các phương án:</p>
 								<div class="grid gap-2">
-									{#each item.answers.filter((answer: string) => {
+									{#each item.answers?.filter((answer: string) => {
 										const content = answer.split('. ')[1];
 										return content && content.trim() !== '';
-									}) as answer}
+									}) || [] as answer}
+										{@const answerKey = answer.split('.')[0].trim().toUpperCase()}
 										<div
-											class="flex items-center rounded-lg border p-3 transition-all duration-200 hover:shadow-sm {answer.includes(
-												item.true_answer
-											)
+											class="flex items-center rounded-lg border p-3 transition-all duration-200 hover:shadow-sm {item.correct_answer_keys &&
+											item.correct_answer_keys.includes(answerKey)
 												? 'bg-[#8E7FDD] bg-opacity-10'
 												: ''}"
-											class:border-[#8E7FDD]={answer.includes(item.true_answer)}
-											class:border-gray-200={!answer.includes(item.true_answer)}
+											class:border-[#8E7FDD]={item.correct_answer_keys &&
+												item.correct_answer_keys.includes(answerKey)}
+											class:border-gray-200={!(
+												item.correct_answer_keys && item.correct_answer_keys.includes(answerKey)
+											)}
 										>
 											<div
 												class="mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2"
-												class:border-[#8E7FDD]={answer.includes(item.true_answer)}
-												class:border-gray-300={!answer.includes(item.true_answer)}
+												class:border-[#8E7FDD]={item.correct_answer_keys &&
+													item.correct_answer_keys.includes(answerKey)}
+												class:border-gray-300={!(
+													item.correct_answer_keys && item.correct_answer_keys.includes(answerKey)
+												)}
 											>
-												{#if answer.includes(item.true_answer)}
+												{#if item.correct_answer_keys && item.correct_answer_keys.includes(answerKey)}
 													<div class="h-3 w-3 rounded-full bg-[#8E7FDD]"></div>
 												{/if}
 											</div>
 											<p
 												class="text-gray-700"
-												class:font-medium={answer.includes(item.true_answer)}
+												class:font-medium={item.correct_answer_keys &&
+													item.correct_answer_keys.includes(answerKey)}
 											>
 												{answer}
 											</p>
@@ -360,10 +365,24 @@
 									<span class="rounded-full bg-yellow-500 px-3 py-1 text-sm font-medium text-white">
 										Trùng trong file Docx
 									</span>
+									{#if !isNaN(item.question_similarity) && !isNaN(item.answer_similarity)}
+										<span class="text-sm text-gray-600">
+											Q: {(item.question_similarity * 100).toFixed(2)}% | A: {(
+												item.answer_similarity * 100
+											).toFixed(2)}%
+										</span>
+									{/if}
 								{:else if item.duplicate_type === 'db'}
 									<span class="rounded-full bg-red-500 px-3 py-1 text-sm font-medium text-white">
 										Trùng trong Database
 									</span>
+									{#if !isNaN(item.question_similarity) && !isNaN(item.answer_similarity)}
+										<span class="text-sm text-gray-600">
+											Q: {(item.question_similarity * 100).toFixed(2)}% | A: {(
+												item.answer_similarity * 100
+											).toFixed(2)}%
+										</span>
+									{/if}
 								{/if}
 							{:else}
 								<span class="rounded-full bg-green-500 px-3 py-1 text-sm font-medium text-white">
@@ -421,6 +440,12 @@
 				{/if}
 			</span>
 		</div>
+		<button
+			class="ml-4 rounded-full bg-white/20 p-1 hover:bg-white/30"
+			on:click={() => (showSuccess = false)}
+		>
+			<Icon icon="icon-park-outline:close" class="h-4 w-4" />
+		</button>
 	</div>
 {/if}
 
@@ -436,6 +461,12 @@
 			<span class="font-medium">Lỗi!</span>
 			<span class="text-sm text-white/80">{errorMessage}</span>
 		</div>
+		<button
+			class="ml-4 rounded-full bg-white/20 p-1 hover:bg-white/30"
+			on:click={() => (showError = false)}
+		>
+			<Icon icon="icon-park-outline:close" class="h-4 w-4" />
+		</button>
 	</div>
 {/if}
 
