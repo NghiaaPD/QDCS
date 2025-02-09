@@ -15,9 +15,11 @@ use docx_rust::document::BodyContent;
 use crate::middleware::fill_format::extract_cell_text;
 use crate::middleware::fill_format::EMBEDDING_MODEL;
 use std::collections::HashMap;
+use crate::services::load_accurancy::load_similarity_threshold;
 
 #[tauri::command]
 async fn process_docx(file_path: String) -> Result<String, String> {
+    let similarity_threshold = load_similarity_threshold()?;
     let path = PathBuf::from(file_path);
     let docx_result = read_docx_content(path.to_str().unwrap_or(""));
     let db_result = query_db();
@@ -75,7 +77,7 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                             (q_sim, a_sim)
                         };
 
-                        if question_similarity > 0.5 && answer_similarity > 0.5 {
+                        if question_similarity > similarity_threshold && answer_similarity > similarity_threshold {
                             results.push(serde_json::json!({
                                 "id": docx_item1.id,
                                 "docx_question": docx_item1.text,
@@ -111,7 +113,7 @@ async fn process_docx(file_path: String) -> Result<String, String> {
                             &db_item.1
                         );
                         
-                        if question_similarity > 0.5 && answer_similarity > 0.5 {
+                        if question_similarity > similarity_threshold && answer_similarity > similarity_threshold {
                             results.push(serde_json::json!({
                                 "id": docx_item1.id,
                                 "docx_question": docx_item1.text,
