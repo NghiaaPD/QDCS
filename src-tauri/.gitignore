@@ -3,3 +3,8 @@
 /target/
 
 .fastembed_cache
+FUC-mini
+msvcp140.dll
+vcruntime140_1.dll
+vcruntime140.dll
+

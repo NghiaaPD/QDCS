@@ -98,8 +98,10 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
                     let option_key = first_cell.chars().next().unwrap().to_uppercase().to_string();
                     if let Some(cell) = row.cells.get(1) {
                         let answer_text = extract_cell_text(cell).trim().to_string();
-                        answer_texts.insert(option_key.clone(), answer_text.clone());
-                        question.answers.push(format!("{} {}", first_cell, answer_text));
+                        if !answer_text.trim().is_empty() {
+                            answer_texts.insert(option_key.clone(), answer_text.clone());
+                            question.answers.push(format!("{} {}", first_cell, answer_text));
+                        }
                     }
                 }
                 
@@ -145,6 +147,21 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
                 vec![&combined_answers], 
                 None
             )?.remove(0);
+
+            // Chuẩn hóa nội dung câu hỏi để so sánh tốt hơn
+            question.text = question.text.trim().to_string();
+            
+            // Chuẩn hóa các đáp án
+            for i in 0..question.answers.len() {
+                // Tách prefix và nội dung
+                if let Some(pos) = question.answers[i].find('.') {
+                    if pos <= 2 {
+                        let prefix = &question.answers[i][..=pos];
+                        let content = question.answers[i][pos+1..].trim();
+                        question.answers[i] = format!("{} {}", prefix, content);
+                    }
+                }
+            }
 
             questions.push(question);
         }

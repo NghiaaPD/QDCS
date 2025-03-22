@@ -174,32 +174,71 @@
 			console.log('Ngưỡng xuất file:', threshold.toFixed(2) + '%');
 
 			isExporting = true;
-			// Sửa lại logic lọc - giữ lại những câu có tỉ lệ trùng THẤP HƠN ngưỡng
-			const duplicateQuestions = similarities.filter((item) => {
-				const similarityPercentage = parseFloat(item.similarity_score.replace('%', ''));
+			// Sửa lại logic để giữ lại những câu không trùng lặp
+			const nonDuplicateQuestions = similarities.filter((item) => {
+				// Kiểm tra xem item.is_similar có tồn tại không
+				if (item.is_similar === true) {
+					// Nếu đã được đánh dấu trùng lặp, loại bỏ
+					console.log(`Câu ${item.id}: đã được đánh dấu trùng lặp (Loại bỏ)`);
+					return false;
+				}
+
+				// Xử lý trường hợp NaN bằng cách kiểm tra giá trị similarity_score
+				const similarityStr = item.similarity_score || '0%';
+				const similarityPercentage = parseFloat(similarityStr.replace('%', ''));
+
+				if (isNaN(similarityPercentage)) {
+					// Nếu là NaN, giữ lại (vì không có độ tương đồng)
+					console.log(`Câu ${item.id}: không có độ tương đồng (Giữ lại)`);
+					return true;
+				}
+
+				// So sánh với ngưỡng
+				const shouldKeep = similarityPercentage < threshold;
 				console.log(
-					`Câu ${item.id}: ${similarityPercentage}% ${similarityPercentage >= threshold ? '(Loại bỏ)' : '(Giữ lại)'}`
+					`Câu ${item.id}: ${similarityPercentage}% ${shouldKeep ? '(Giữ lại)' : '(Loại bỏ)'}`
 				);
-				return similarityPercentage < threshold; // Thay đổi từ >= thành <
+				return shouldKeep;
 			});
 
-			const duplicateIds = duplicateQuestions.map((item) => item.id);
+			const nonDuplicateIds = nonDuplicateQuestions.map((item) => item.id);
+			console.log('Số câu được giữ lại:', nonDuplicateIds.length);
 
 			try {
-				const newFilePath = processedFilePath.replace('.docx', '_filtered.docx');
-				await invoke('filter_docx', {
+				// Kiểm tra uploadedFile trước khi truy cập thuộc tính name
+				const originalFilename = uploadedFile?.name || 'output';
+
+				console.log('Tên file gốc:', originalFilename);
+
+				const result = await invoke('filter_docx', {
 					filePath: processedFilePath,
-					duplicateIds: duplicateIds
+					duplicateIds: nonDuplicateIds,
+					originalFilename: originalFilename
 				});
 
-				console.log('Đã tạo file mới tại:', newFilePath);
-				console.log('Số câu được giữ lại:', duplicateIds.length);
+				console.log('Đã tạo file mới tại:', result);
 				showSuccess = true;
 				successType = 'export';
+
+				// Thêm dòng này để đảm bảo showError = false khi thành công
+				showError = false;
 			} catch (error) {
 				console.error('Lỗi khi xử lý file:', error);
-				errorMessage = 'Có lỗi xảy ra khi xử lý file';
+
+				// Xử lý trường hợp không có câu hỏi nào được giữ lại
+				if (String(error).includes('Không có câu hỏi nào được giữ lại')) {
+					errorMessage =
+						'Không có câu hỏi nào được giữ lại sau khi lọc. Vui lòng kiểm tra lại tiêu chí lọc.';
+				} else {
+					errorMessage = 'Có lỗi xảy ra khi xử lý file: ' + String(error);
+				}
+
 				showError = true;
+
+				// Thêm dòng này để tự động ẩn thông báo lỗi sau 5 giây
+				setTimeout(() => {
+					showError = false;
+				}, 5000);
 			} finally {
 				isExporting = false;
 			}
@@ -207,6 +246,37 @@
 			console.error('Lỗi khi đọc file config:', error);
 			errorMessage = 'Có lỗi xảy ra khi đọc cấu hình';
 			showError = true;
+		}
+	}
+
+	async function exportFilteredDocx() {
+		isExporting = true;
+		try {
+			const selectedIds = similarities
+				.filter((item) => item.keep)
+				.map((item) => item.id.toString());
+
+			console.log('Tên file gốc:', uploadedFile?.name || 'unknown');
+
+			const result = await invoke('filter_docx', {
+				filePath: processedFilePath,
+				duplicateIds: selectedIds,
+				originalFilename: uploadedFile?.name || 'output'
+			});
+
+			console.log('Kết quả:', result); // Log kết quả để kiểm tra
+
+			// Hiển thị thông báo thành công
+			showSuccess = true;
+			successType = 'export';
+			setTimeout(() => {
+				showSuccess = false;
+			}, 3000);
+		} catch (e) {
+			showError = true;
+			errorMessage = String(e);
+		} finally {
+			isExporting = false;
 		}
 	}
 </script>
@@ -365,23 +435,18 @@
 						<div class="mt-4 flex items-center gap-2">
 							<span class="text-base text-gray-600">Trạng thái:</span>
 							{#if item.is_similar}
-								{#if item.duplicate_type === 'docx'}
+								{#if item.duplicate_type === 'internal'}
+									<span class="rounded-full bg-purple-500 px-3 py-1 text-sm font-medium text-white">
+										Trùng đáp án trong câu
+									</span>
+								{:else if item.duplicate_type === 'docx'}
 									<span class="rounded-full bg-yellow-500 px-3 py-1 text-sm font-medium text-white">
-										Trùng trong file Docx
+										Trùng câu khác trong file
 									</span>
 								{:else if item.duplicate_type === 'db'}
 									<span class="rounded-full bg-red-500 px-3 py-1 text-sm font-medium text-white">
 										Trùng trong Database
 									</span>
-								{:else if item.duplicate_type === 'internal'}
-									<span class="rounded-full bg-purple-500 px-3 py-1 text-sm font-medium text-white">
-										Trùng trong câu hỏi
-									</span>
-									{#if item.duplicate_answers}
-										<span class="text-sm text-gray-600">
-											Độ tương đồng: {(item.duplicate_answers.similarity * 100).toFixed(2)}%
-										</span>
-									{/if}
 								{/if}
 							{:else}
 								<span class="rounded-full bg-green-500 px-3 py-1 text-sm font-medium text-white">
