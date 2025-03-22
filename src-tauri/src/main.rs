@@ -19,12 +19,12 @@ use crate::services::load_accurancy::load_similarity_threshold;
 use crate::middleware::check_duplicate_answers::check_duplicate_answers;
 
 #[tauri::command]
-async fn process_docx(file_path: String) -> Result<String, String> {
+async fn process_docx(file_path: String, subject: String) -> Result<String, String> {
     let similarity_threshold = load_similarity_threshold()?;
     
     let path = PathBuf::from(file_path);
     let docx_result = read_docx_content(path.to_str().unwrap_or(""));
-    let db_result = query_db();
+    let db_result = query_db(&subject);
     
     match (docx_result, db_result) {
         (Ok(questions), Ok(embeddings)) => {
@@ -188,8 +188,17 @@ async fn process_docx(file_path: String) -> Result<String, String> {
             });
             Ok(result.to_string())
         },
-        (Err(e), _) => Err(e.to_string()),
-        (_, Err(e)) => Err(e.to_string())
+        (Err(e), _) => Err(format!("Lỗi khi đọc file DOCX: {}", e)),
+        (_, Err(e)) => {
+            if e.to_string().contains("Unable to open database") || 
+               e.to_string().contains("No such file") {
+                Err(format!("Không tìm thấy cơ sở dữ liệu cho môn học '{}'. Vui lòng kiểm tra lại tên môn học hoặc liên hệ quản trị viên.", subject))
+            } else if e.to_string().contains("Table with name Data does not exist") {
+                Err(format!("Cơ sở dữ liệu cho môn học '{}' không tồn tại. Vui lòng kiểm tra lại.", subject))
+            } else {
+                Err(format!("Lỗi cơ sở dữ liệu: {}", e))
+            }
+        }
     }
 }
 

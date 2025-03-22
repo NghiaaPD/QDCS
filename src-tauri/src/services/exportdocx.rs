@@ -75,32 +75,32 @@ pub fn extract_questions_from_docx(file_path: &str) -> Result<Vec<QuestionData>,
     Ok(questions)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let file_path = "C:/Users/Admin/Downloads/test2.docx"; // Thay đổi đường dẫn file của bạn
+// fn main() -> Result<(), Box<dyn std::error::Error>> {
+//     let file_path = "C:/Users/Admin/Downloads/test2.docx"; // Thay đổi đường dẫn file của bạn
     
-    match extract_questions_from_docx(file_path) {
-        Ok(questions) => {
-            for (i, q) in questions.iter().enumerate() {
-                println!("\n=== Câu hỏi {} ===", i + 1);
-                println!("QN: {}", q.qn);
-                println!("Câu hỏi: {}", q.question);
-                println!("Các lựa chọn:");
-                for (j, option) in q.options.iter().enumerate() {
-                    println!("  {}. {}", (b'a' + j as u8) as char, option);
-                }
-                println!("Đáp án: {}", q.answer);
-                println!("Điểm: {}", q.mark);
-                println!("Unit: {}", q.unit);
-                println!("LO: {}", q.lo);
-                println!("Mix choices: {}", q.mix_choices);
-                println!("Creator-Reviewer: {}", q.creator_reviewer);
-                println!("Editor: {}", q.editor);
-                println!("Reference: {}", q.reference);
-            }
-        }
-        Err(e) => println!("Lỗi khi đọc file: {}", e),
-    }
+//     match extract_questions_from_docx(file_path) {
+//         Ok(questions) => {
+//             for (i, q) in questions.iter().enumerate() {
+//                 println!("\n=== Câu hỏi {} ===", i + 1);
+//                 println!("QN: {}", q.qn);
+//                 println!("Câu hỏi: {}", q.question);
+//                 println!("Các lựa chọn:");
+//                 for (j, option) in q.options.iter().enumerate() {
+//                     println!("  {}. {}", (b'a' + j as u8) as char, option);
+//                 }
+//                 println!("Đáp án: {}", q.answer);
+//                 println!("Điểm: {}", q.mark);
+//                 println!("Unit: {}", q.unit);
+//                 println!("LO: {}", q.lo);
+//                 println!("Mix choices: {}", q.mix_choices);
+//                 println!("Creator-Reviewer: {}", q.creator_reviewer);
+//                 println!("Editor: {}", q.editor);
+//                 println!("Reference: {}", q.reference);
+//             }
+//         }
+//         Err(e) => println!("Lỗi khi đọc file: {}", e),
+//     }
     
-    Ok(())
-}
+//     Ok(())
+// }
 

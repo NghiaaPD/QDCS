@@ -18,7 +18,7 @@ pub fn check_duplicate_answers(answers: &Vec<String>) -> Option<(String, String,
     let mut embeddings = Vec::new();
     for ans in answers {
         // Bỏ qua các đáp án quá ngắn (ví dụ: "Kai", "Cat", "Hat")
-        if ans.len() <= 3 {
+        if ans.len() <= 0 {
             continue;
         }
         

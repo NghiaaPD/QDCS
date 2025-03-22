@@ -1,8 +1,10 @@
 use duckdb::{Connection, Result};
 use serde_json;
 
-pub fn query_db() -> Result<Vec<(Vec<f32>, Vec<f32>)>> {
-    let conn = Connection::open("data.duckdb")?;
+pub fn query_db(db_name: &str) -> Result<Vec<(Vec<f32>, Vec<f32>)>> {
+    let file_path = format!("{}.duckdb", db_name);
+
+    let conn = Connection::open(&file_path)?;
 
     let mut stmt = conn.prepare("
         SELECT 

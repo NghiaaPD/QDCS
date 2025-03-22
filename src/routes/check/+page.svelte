@@ -97,11 +97,15 @@
 
 			processedFilePath = tempPath;
 
-			const result = await invoke<string>('process_docx', {
-				filePath: tempPath
+			// Lấy môn học từ localStorage
+			const selectedSubject = localStorage.getItem('selectedSubject') || '';
+
+			const result = await invoke('process_docx', {
+				filePath: tempPath,
+				subject: selectedSubject
 			});
 
-			const parsedResult = JSON.parse(result);
+			const parsedResult = JSON.parse(result as string);
 
 			// Tạo Map để lưu kết quả có độ trùng cao nhất cho mỗi ID
 			const bestResults = new Map();
@@ -147,9 +151,9 @@
 				});
 			}, 500);
 		} catch (error) {
-			errorMessage = error as string;
+			console.error('Lỗi khi xử lý file:', error);
+			errorMessage = (error as Error).toString();
 			showError = true;
-			console.error('Lỗi:', error);
 		} finally {
 			isProcessing = false;
 		}
@@ -472,3 +476,10 @@
 	bind:this={fileInput}
 	on:change={handleFileSelect}
 />
+
+<!-- Hiển thị thông báo lỗi -->
+{#if errorMessage}
+	<div class="error-message mb-4 rounded border border-red-400 bg-red-100 px-4 py-3 text-red-700">
+		<p>{errorMessage}</p>
+	</div>
+{/if}

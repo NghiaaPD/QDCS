@@ -1,15 +1,19 @@
 use docx_rust::DocxFile;
 use docx_rust::document::{BodyContent, ParagraphContent, RunContent, TableRowContent, TableCellContent};
 use std::path::Path;
-use lazy_static::lazy_static;
+use std::path::PathBuf;
+use std::sync::LazyLock;
 use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 
-lazy_static! {
-    pub static ref EMBEDDING_MODEL: TextEmbedding = TextEmbedding::try_new(
-        InitOptions::new(EmbeddingModel::AllMiniLML6V2)
-            .with_show_download_progress(true)
-    ).expect("Không thể khởi tạo model embedding");
-}
+pub static EMBEDDING_MODEL: LazyLock<TextEmbedding> = LazyLock::new(|| {
+    let mut options = InitOptions::default();
+    options.model_name = EmbeddingModel::AllMiniLML6V2;
+    options.show_download_progress = true;
+    options.cache_dir = PathBuf::from("FUC-mini");
+        
+    TextEmbedding::try_new(options)
+        .expect("Không thể khởi tạo model embedding")
+});
 
 pub fn extract_cell_text(cell: &TableRowContent) -> String {
     match cell {
