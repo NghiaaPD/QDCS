@@ -124,29 +124,38 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
                 }
             }
 
-            // Kiểm tra và tạo embeddings
+            // Kiểm tra và bỏ qua câu hỏi lỗi
             if question.id.is_empty() {
-                return Err("File sai format: Thiếu ID câu hỏi (QN=)".into());
+                println!("Warning: Skip câu hỏi thiếu ID");
+                continue;
             }
             if question.text.is_empty() {
-                return Err(format!("File sai format: Câu hỏi {} thiếu nội dung", question.id).into());
+                println!("Warning: Skip câu hỏi {} thiếu nội dung", question.id);
+                continue;
             }
             if question.correct_answers.is_empty() {
-                return Err(format!("File sai format: Câu hỏi {} thiếu đáp án đúng", question.id).into());
+                println!("Warning: Skip câu hỏi {} thiếu đáp án đúng", question.id);
+                continue;
             }
 
             // Tạo embedding cho câu hỏi
-            question.question_embedding = EMBEDDING_MODEL.embed(
-                vec![&question.text], 
-                None
-            )?.remove(0);
-            
+            match EMBEDDING_MODEL.embed(vec![&question.text], None) {
+                Ok(mut embedding) => question.question_embedding = embedding.remove(0),
+                Err(e) => {
+                    println!("Warning: Không thể tạo embedding cho câu hỏi {}: {}", question.id, e);
+                    continue;
+                }
+            };
+
             // Tạo embedding cho tất cả đáp án đúng ghép lại
             let combined_answers = question.correct_answers.join(" ");
-            question.answer_embedding = EMBEDDING_MODEL.embed(
-                vec![&combined_answers], 
-                None
-            )?.remove(0);
+            match EMBEDDING_MODEL.embed(vec![&combined_answers], None) {
+                Ok(mut embedding) => question.answer_embedding = embedding.remove(0),
+                Err(e) => {
+                    println!("Warning: Không thể tạo embedding cho đáp án câu {}: {}", question.id, e);
+                    continue;
+                }
+            };
 
             // Chuẩn hóa nội dung câu hỏi để so sánh tốt hơn
             question.text = question.text.trim().to_string();
@@ -165,6 +174,10 @@ pub fn read_docx_content(file_path: &str) -> Result<Vec<Question>, Box<dyn std::
 
             questions.push(question);
         }
+    }
+    
+    if questions.is_empty() {
+        return Err("Không tìm thấy câu hỏi hợp lệ nào trong file".into());
     }
     
     Ok(questions)
