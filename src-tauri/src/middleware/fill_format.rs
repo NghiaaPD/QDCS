@@ -9,10 +9,30 @@ pub static EMBEDDING_MODEL: LazyLock<TextEmbedding> = LazyLock::new(|| {
     let mut options = InitOptions::default();
     options.model_name = EmbeddingModel::AllMiniLML6V2;
     options.show_download_progress = true;
-    options.cache_dir = PathBuf::from("FUC-mini");
+    
+    // Lưu cache_dir trước khi options bị move
+    let cache_dir = std::env::temp_dir().join("FUC-mini");
+    options.cache_dir = cache_dir.clone();
         
-    TextEmbedding::try_new(options)
-        .expect("Không thể khởi tạo model embedding")
+    match TextEmbedding::try_new(options) {
+        Ok(model) => model,
+        Err(e) => {
+            // Xóa thư mục cache cũ nếu có lỗi
+            if let Ok(_) = std::fs::remove_dir_all(&cache_dir) {
+                println!("Đã xóa cache cũ, đang tải lại model...");
+                // Tạo options mới để thử lại
+                let mut new_options = InitOptions::default();
+                new_options.model_name = EmbeddingModel::AllMiniLML6V2;
+                new_options.show_download_progress = true;
+                new_options.cache_dir = cache_dir;
+                
+                TextEmbedding::try_new(new_options)
+                    .expect("Không thể khởi tạo model embedding sau khi xóa cache")
+            } else {
+                panic!("Không thể khởi tạo model embedding: {}", e);
+            }
+        }
+    }
 });
 
 pub fn extract_cell_text(cell: &TableRowContent) -> String {
