@@ -62,7 +62,8 @@
       "resources": [
         "./msvcp140.dll",
         "./vcruntime140.dll",
-        "./vcruntime140_1.dll"
+        "./vcruntime140_1.dll",
+        "./msvcp140_1.dll"
       ],
       "shortDescription": "",
       "targets": "all",

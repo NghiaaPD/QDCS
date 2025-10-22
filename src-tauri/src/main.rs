@@ -12,6 +12,7 @@ use functions::cosine_calculate::calculate_cosine_similarity;
 use functions::plot_similarity::calculate_similarity_score;
 use crate::services::load_accurancy::load_similarity_threshold;
 use crate::middleware::check_duplicate_answers::check_duplicate_answers;
+use crate::services::export_docx::filter_docx_questions;
 
 #[tauri::command]
 async fn process_docx(file_path: String, subject: String) -> Result<String, String> {
@@ -225,12 +226,12 @@ async fn filter_docx(file_path: String, duplicate_ids: Vec<String>, original_fil
     // Sao chép file tạm thời để hiển thị UI thành công
     std::thread::sleep(std::time::Duration::from_millis(100));
     
-    match std::fs::copy(&file_path, &new_file_path) {
+    match filter_docx_questions(&file_path, &new_file_path_str, &duplicate_ids) {
         Ok(_) => {
-            println!("Đã sao chép file. LƯU Ý: Chức năng lọc chưa được thực hiện.");
+            println!("Đã lọc và xuất file thành công.");
             Ok(new_file_path_str)
         },
-        Err(e) => Err(format!("Lỗi khi sao chép file: {}", e))
+        Err(e) => Err(format!("Lỗi khi lọc file: {}", e))
     }
 }
 

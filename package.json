@@ -48,6 +48,7 @@
 		"@sveltejs/enhanced-img": "^0.4.4",
 		"@sveltejs/kit": "^2.0.0",
 		"@tauri-apps/api": "1.0.0",
+		"caniuse-lite": "^1.0.30001727",
 		"docx": "^9.1.1",
 		"drizzle-orm": "^0.38.4",
 		"install": "^0.13.0"
